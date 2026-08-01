@@ -9,10 +9,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  # Geen daemon in CI: de runner is er na één build toch weer klaar mee, en een
+  # daemon die blijft hangen kost alleen geheugen.
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
 jobs:
-  test:
-    name: Unittests (pure JVM)
+  # Statische analyse draait apart van de tests: het is een andere soort fout,
+  # het duurt kort, en zo zie je in één oogopslag welke van de twee stuk is.
+  analyse:
+    name: Statische analyse (detekt + ktlint)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -23,17 +34,179 @@ jobs:
           java-version: '21'
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Alleen builds op main vullen de gedeelde cache; pull requests lezen
+          # hem. Dat voorkomt dat één tak de cache van iedereen vervuilt.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # `--continue` zodat één module die struikelt niet verbergt wat er in de
+      # acht andere aan de hand is. De stap faalt hoe dan ook zodra er iets
+      # buiten de basislijn uit komt.
+      - name: Detekt
+        run: ./gradlew detekt --continue
+
+      - name: Samenvatting statische analyse
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, xml.etree.ElementTree as ET, collections, os
+
+          bevindingen = []
+          for pad in glob.glob('*/build/reports/detekt/detekt.xml'):
+              for bestand in ET.parse(pad).getroot().iter('file'):
+                  # `basePath` maakt de paden al relatief; een absoluut pad
+                  # (oudere detekt, andere instelling) korten we alsnog in.
+                  naam = bestand.get('name')
+                  if os.path.isabs(naam):
+                      naam = os.path.relpath(naam, os.getcwd())
+                  for fout in bestand.iter('error'):
+                      bevindingen.append((naam, fout.get('line'),
+                                          fout.get('source', '').split('.')[-1],
+                                          fout.get('message', '')))
+
+          print('## Statische analyse\n')
+          if not bevindingen:
+              print('Geen nieuwe bevindingen. Bestaande overtredingen staan in '
+                    '`config/detekt/baseline-*.xml`.')
+          else:
+              print(f'**{len(bevindingen)} nieuwe bevinding(en)** buiten de basislijn om.\n')
+              print('| Regel | Aantal |')
+              print('| --- | ---: |')
+              for regel, aantal in collections.Counter(b[2] for b in bevindingen).most_common():
+                  print(f'| `{regel}` | {aantal} |')
+              print('\n<details><summary>Alle bevindingen</summary>\n')
+              print('| Plek | Regel | Melding |')
+              print('| --- | --- | --- |')
+              for naam, lijn, regel, melding in sorted(bevindingen)[:200]:
+                  melding = melding.replace('|', r'\|')[:160]
+                  print(f'| `{naam}:{lijn}` | `{regel}` | {melding} |')
+              print('\n</details>')
+          PY
+
+      - name: Detekt-rapporten bewaren
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detekt-reports
+          path: '*/build/reports/detekt/'
+          retention-days: 7
+          if-no-files-found: ignore
+
+  test:
+    name: Unittests en dekking (pure JVM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       # De Android-modules staan bewust niet in settings.gradle.kts en worden
-      # hier dus niet gebouwd. Zodra ze aan staan hoort daar een tweede job bij
+      # hier dus niet gebouwd. Zodra ze aan staan hoort daar een derde job bij
       # met een Android SDK; zie docs/BOUWPLAN.md.
-      - name: Test
-        run: ./gradlew --no-daemon test
+      #
+      # `:koverXmlReport` mét dubbele punt is het samengevoegde rapport van het
+      # hoofdproject; zonder die punt zou elke module ook nog zijn eigen rapport
+      # schrijven. `:koverVerify` bewaakt de ondergrens voor de regeldekking en
+      # maakt de build rood zodra die eronder zakt.
+      - name: Test en dekking
+        run: ./gradlew test :koverXmlReport :koverVerify --continue
 
-      - name: Testrapport
+      - name: Samenvatting testresultaten
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, xml.etree.ElementTree as ET, collections
+
+          per_module = collections.defaultdict(collections.Counter)
+          mislukt = []
+
+          for pad in glob.glob('*/build/test-results/test/TEST-*.xml'):
+              module = pad.split('/')[0]
+              wortel = ET.parse(pad).getroot()
+              suites = [wortel] if wortel.tag == 'testsuite' else list(wortel.iter('testsuite'))
+              for suite in suites:
+                  teller = per_module[module]
+                  teller['tests'] += int(suite.get('tests', 0))
+                  teller['fouten'] += int(suite.get('failures', 0)) + int(suite.get('errors', 0))
+                  teller['overgeslagen'] += int(suite.get('skipped', 0))
+                  teller['tijd'] += float(suite.get('time') or 0)
+                  for geval in suite.iter('testcase'):
+                      for soort in ('failure', 'error'):
+                          for f in geval.findall(soort):
+                              mislukt.append((module, geval.get('classname', ''),
+                                              geval.get('name', ''), f.get('message') or ''))
+
+          totaal = sum(t['tests'] for t in per_module.values())
+          fouten = sum(t['fouten'] for t in per_module.values())
+          overgeslagen = sum(t['overgeslagen'] for t in per_module.values())
+
+          print(f"## {'Tests mislukt' if fouten else 'Tests geslaagd'}: "
+                f'{totaal - fouten - overgeslagen} van {totaal}\n')
+          if not per_module:
+              print('Geen testresultaten gevonden.')
+          else:
+              print('| Module | Tests | Fouten | Overgeslagen | Tijd |')
+              print('| --- | ---: | ---: | ---: | ---: |')
+              for module in sorted(per_module):
+                  t = per_module[module]
+                  print(f"| `{module}` | {t['tests']} | {t['fouten']} | "
+                        f"{t['overgeslagen']} | {t['tijd']:.1f}s |")
+              print(f'| **totaal** | **{totaal}** | **{fouten}** | **{overgeslagen}** | |')
+
+          if mislukt:
+              print('\n### Mislukte tests\n')
+              for module, klasse, naam, melding in mislukt[:50]:
+                  print(f'- `{module}` · `{klasse}` · **{naam}**')
+                  if melding:
+                      eerste = melding.replace('|', r'\|').splitlines()[0][:200]
+                      print(f'  <br>`{eerste}`')
+          PY
+
+      - name: Samenvatting dekking
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import os, xml.etree.ElementTree as ET
+
+          pad = 'build/reports/kover/report.xml'
+          print('\n## Dekking\n')
+          if not os.path.exists(pad):
+              print('Geen dekkingsrapport gevonden.')
+          else:
+              wortel = ET.parse(pad).getroot()
+              tellers = {t.get('type'): (int(t.get('covered')), int(t.get('missed')))
+                         for t in wortel.findall('counter')}
+              namen = [('LINE', 'Regels'), ('BRANCH', 'Vertakkingen'),
+                       ('INSTRUCTION', 'Instructies'), ('METHOD', 'Methoden'),
+                       ('CLASS', 'Klassen')]
+              print('| Maat | Gedekt | Totaal | Percentage |')
+              print('| --- | ---: | ---: | ---: |')
+              for sleutel, naam in namen:
+                  if sleutel not in tellers:
+                      continue
+                  gedekt, gemist = tellers[sleutel]
+                  som = gedekt + gemist
+                  pct = (100.0 * gedekt / som) if som else 0.0
+                  print(f'| {naam} | {gedekt} | {som} | {pct:.1f}% |')
+          PY
+
+      - name: Testrapport en dekking bewaren
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: '**/build/reports/tests/test'
+          path: |
+            */build/reports/tests/test
+            */build/test-results/test
+            build/reports/kover
           retention-days: 7
+          if-no-files-found: ignore

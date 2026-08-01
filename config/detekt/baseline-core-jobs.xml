@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>MatchingDeclarationName:TestFixtures.kt$FakeThermalGate : ThermalGate</ID>
+    <ID>TooManyFunctions:JobQueue.kt$JobQueue</ID>
+  </CurrentIssues>
+</SmellBaseline>

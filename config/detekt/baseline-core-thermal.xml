@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>MagicNumber:ThermalReport.kt$60_000.0</ID>
+    <ID>MagicNumber:ThermalReport.kt$60_000L</ID>
+    <ID>ReturnCount:ChunkScheduler.kt$ChunkScheduler$public fun next(status: ThermalStatus, nowMs: Long): ChunkPlan</ID>
+  </CurrentIssues>
+</SmellBaseline>

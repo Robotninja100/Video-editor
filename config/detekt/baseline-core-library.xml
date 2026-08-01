@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>MagicNumber:MediaAsset.kt$MediaIdentity$0xFF</ID>
+    <ID>MagicNumber:MediaAsset.kt$MediaIdentity$4</ID>
+    <ID>MagicNumber:Sidecars.kt$SidecarPaths$3</ID>
+    <ID>MaxLineLength:LibraryMaintenanceTest.kt$LibraryMaintenanceTest$assertEquals(listOf(ongebruikt.id), kandidaten.map { it.id }, "kandidaten: ${kandidaten.map { it.displayName }}")</ID>
+    <ID>MaxLineLength:LibraryMaintenanceTest.kt$LibraryMaintenanceTest$storage.write(SidecarPaths.of("verdwenen", AnalysisKind.SCENES), SidecarRecord("verdwenen", AnalysisKind.SCENES, 1, 0L))</ID>
+    <ID>MaximumLineLength:LibraryMaintenanceTest.kt$LibraryMaintenanceTest$ </ID>
+    <ID>ReturnCount:MediaCatalog.kt$MediaFilter$public fun matches(asset: MediaAsset): Boolean</ID>
+    <ID>ReturnCount:SidecarStatus.kt$SidecarIndex$private fun stateOf(asset: MediaAsset, kind: AnalysisKind, path: String): SidecarState</ID>
+    <ID>SpacingBetweenDeclarationsWithComments:Sidecars.kt$SidecarStorage$/** Alle bekende paden, in een stabiele volgorde. */</ID>
+  </CurrentIssues>
+</SmellBaseline>

@@ -1,0 +1,112 @@
+# Aanvulling op de standaardconfiguratie van detekt (`buildUponDefaultConfig`).
+# Alleen wat voor deze codebase anders moet staat hier; de rest blijft
+# standaard, zodat een detekt-upgrade nieuwe regels vanzelf meebrengt.
+
+build:
+  maxIssues: 0
+
+console-reports:
+  active: true
+  exclude:
+    - 'ProjectStatisticsReport'
+    - 'ComplexityReport'
+    - 'NotificationReport'
+
+comments:
+  # De code is uitvoerig van commentaar voorzien in het Nederlands. Verplichte
+  # KDoc afdwingen zou daar niets aan toevoegen.
+  UndocumentedPublicClass:
+    active: false
+  UndocumentedPublicFunction:
+    active: false
+  UndocumentedPublicProperty:
+    active: false
+
+complexity:
+  LongParameterList:
+    # Datamodellen met veel velden zijn hier normaal en beter leesbaar dan een
+    # bouwer-patroon.
+    functionThreshold: 8
+    constructorThreshold: 12
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    thresholdInFiles: 20
+    thresholdInClasses: 20
+    thresholdInObjects: 20
+    ignorePrivate: true
+    ignoreOverridden: true
+  LongMethod:
+    excludes: ['**/test/**', '**/*Test.kt']
+  LargeClass:
+    excludes: ['**/test/**', '**/*Test.kt']
+
+exceptions:
+  TooGenericExceptionCaught:
+    excludes: ['**/test/**', '**/*Test.kt']
+  SwallowedException:
+    excludes: ['**/test/**', '**/*Test.kt']
+
+naming:
+  FunctionNaming:
+    # Testnamen zijn Nederlandse zinnen tussen backticks: `fun `de eerste clip
+    # begint op nul`()`. Bewuste keuze, dus tests vallen buiten deze regel.
+    excludes: ['**/test/**', '**/*Test.kt']
+    ignoreAnnotated:
+      - 'Test'
+      - 'ParameterizedTest'
+      - 'RepeatedTest'
+      - 'TestFactory'
+  FunctionMaxLength:
+    excludes: ['**/test/**', '**/*Test.kt']
+  TopLevelPropertyNaming:
+    excludes: ['**/test/**', '**/*Test.kt']
+  VariableNaming:
+    excludes: ['**/test/**', '**/*Test.kt']
+  ObjectPropertyNaming:
+    excludes: ['**/test/**', '**/*Test.kt']
+
+style:
+  MagicNumber:
+    # Testdata staat vol met concrete getallen; dat is juist het punt van een test.
+    excludes: ['**/test/**', '**/*Test.kt']
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreEnums: true
+    ignoreNumbers:
+      - '-1'
+      - '0'
+      - '1'
+      - '2'
+      - '100'
+      - '1000'
+  MaxLineLength:
+    maxLineLength: 120
+    excludeCommentStatements: true
+  ForbiddenComment:
+    # TODO's zijn in dit project bewuste, gedateerde aantekeningen.
+    active: false
+  UnusedPrivateMember:
+    active: true
+  ThrowsCount:
+    excludes: ['**/test/**', '**/*Test.kt']
+  ReturnCount:
+    max: 4
+    excludeReturnFromLambda: true
+  LoopWithTooManyJumpStatements:
+    maxJumpCount: 2
+
+formatting:
+  # De ktlint-regels. `autoCorrect` staat uit: de controle meldt, hij herschrijft
+  # geen bestanden onder je handen vandaan.
+  FunctionNaming:
+    active: false
+  MaximumLineLength:
+    active: true
+    maxLineLength: 120
+  ArgumentListWrapping:
+    excludes: ['**/test/**', '**/*Test.kt']
+  ParameterListWrapping:
+    excludes: ['**/test/**', '**/*Test.kt']
+  Wrapping:
+    excludes: ['**/test/**', '**/*Test.kt']

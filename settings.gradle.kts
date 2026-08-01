@@ -1,4 +1,7 @@
 pluginManagement {
+    // De conventieplugins (`videoeditor.*`) komen uit deze ingesloten build.
+    includeBuild("build-logic")
+
     repositories {
         gradlePluginPortal()
         mavenCentral()
