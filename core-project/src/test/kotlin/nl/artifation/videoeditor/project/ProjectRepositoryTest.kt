@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -221,4 +222,118 @@ private class HaperendeStore : ProjectStore {
     override fun deleteSlot(id: String, slot: ProjectSlot) = achterliggend.deleteSlot(id, slot)
 
     override fun delete(id: String) = achterliggend.delete(id)
+}
+
+/**
+ * Drie gevallen waarin de opslag stilzwijgend werk weggooide. Alle drie kwamen
+ * uit een code review en geen ervan liet een bestaande test falen.
+ */
+class DataverliesTest {
+
+    private val store = InMemoryProjectStore()
+    private val repository = ProjectRepository(store)
+
+    /**
+     * `CrashRecovery` beslist op de kop van het bestand, en die decodeert ook als
+     * de inhoud eronder onleesbaar is. Werd de autosave eerst weggegooid, dan kon
+     * de enige leesbare kopie verdwijnen op grond van een bestand dat vervolgens
+     * niet bleek te laden.
+     */
+    @Test
+    fun `een onleesbaar hoofdbestand kost de autosave niet`() {
+        repository.create(voorbeeldProject(), "Vakantie", nowMs = 1_000L)
+        repository.autosave(ProjectFile.of(voorbeeldProject(), "Vakantie", lastModifiedMs = 1_000L))
+
+        // Precies het geval dat telt: de kop decodeert nog (dus CrashRecovery
+        // ziet een geldig bestand), maar de inhoud niet meer — hier een
+        // tijdlijnitem uit een nieuwere build die deze versie niet kent.
+        val kapot = store.readRaw("p1", ProjectSlot.MAIN)!!
+            .replace("\"kind\": \"clip\"", "\"kind\": \"sticker\"")
+        store.writeRaw("p1", ProjectSlot.MAIN, kapot)
+        assertFailsWith<CorruptProjectException>("de opzet klopt niet: MAIN laadt gewoon") {
+            store.load("p1", ProjectSlot.MAIN)
+        }
+
+        runCatching { repository.open("p1") }
+
+        assertNotNull(
+            store.readRaw("p1", ProjectSlot.AUTOSAVE),
+            "de autosave was de enige leesbare kopie en is weggegooid",
+        )
+    }
+
+    @Test
+    fun `hernoemen weigert zolang er een herstelkeuze openstaat`() {
+        repository.create(voorbeeldProject(), "Vakantie", nowMs = 1_000L)
+        repository.autosave(ProjectFile.of(voorbeeldProject(), "Vakantie", lastModifiedMs = 900_000L))
+
+        val fout = assertFailsWith<PendingRecoveryException> {
+            repository.rename("p1", "Nieuwe naam", nowMs = 950_000L)
+        }
+
+        assertNotNull(store.readRaw("p1", ProjectSlot.AUTOSAVE), "autosave is toch weggegooid")
+        assertTrue(fout.userMessage.isNotBlank(), "tekst: ${fout.userMessage}")
+    }
+
+    @Test
+    fun `dupliceren weigert zolang er een herstelkeuze openstaat`() {
+        repository.create(voorbeeldProject(), "Vakantie", nowMs = 1_000L)
+        repository.autosave(ProjectFile.of(voorbeeldProject(), "Vakantie", lastModifiedMs = 900_000L))
+
+        assertFailsWith<PendingRecoveryException> {
+            repository.duplicate("p1", "p2", "Kopie", nowMs = 950_000L)
+        }
+    }
+
+    @Test
+    fun `zonder openstaande herstelkeuze werkt hernoemen gewoon`() {
+        repository.create(voorbeeldProject(), "Vakantie", nowMs = 1_000L)
+
+        val hernoemd = repository.rename("p1", "Nieuwe naam", nowMs = 2_000L)
+
+        assertEquals("Nieuwe naam", hernoemd.summary.name)
+    }
+}
+
+/**
+ * De bovengrens hing aan de láátste bewerking in plaats van de eerste. Bij
+ * doorlopend bewerken schoof hij dus telkens mee, en werd een nooit eerder
+ * opgeslagen project nooit weggeschreven — precies waar niets op schijf staat.
+ */
+class AutosaveBovengrensTest {
+
+    @Test
+    fun `doorlopend bewerken van een nieuw project wordt toch weggeschreven`() {
+        var state = AutosaveState()
+        var nu = 0L
+
+        // Tien minuten onafgebroken slepen, elke 16 ms een bewerking.
+        var geschreven = false
+        repeat(2_000) {
+            state = AutosavePolicy.onEdit(state, EditKind.CONTINUOUS, nu)
+            if (AutosavePolicy.decide(state, nu) is AutosaveDecision.Write) geschreven = true
+            nu += 16L
+        }
+
+        assertTrue(geschreven, "na ${nu}ms doorlopend bewerken is er nog nooit geschreven")
+    }
+
+    @Test
+    fun `het anker verschuift niet tijdens een reeks bewerkingen`() {
+        var state = AutosavePolicy.onEdit(AutosaveState(), EditKind.CONTINUOUS, nowMs = 100L)
+        val anker = state.firstEditSinceWriteAtMs
+
+        state = AutosavePolicy.onEdit(state, EditKind.CONTINUOUS, nowMs = 5_000L)
+
+        assertEquals(anker, state.firstEditSinceWriteAtMs, "het anker is meegeschoven")
+        assertEquals(100L, state.firstEditSinceWriteAtMs)
+    }
+
+    @Test
+    fun `na een schrijfactie begint het anker opnieuw`() {
+        var state = AutosavePolicy.onEdit(AutosaveState(), EditKind.STRUCTURAL, nowMs = 100L)
+        state = AutosavePolicy.onWritten(state, startedAtMs = 200L, finishedAtMs = 300L)
+
+        assertNull(state.firstEditSinceWriteAtMs, "zonder onopgeslagen werk hoort er geen anker te zijn")
+    }
 }

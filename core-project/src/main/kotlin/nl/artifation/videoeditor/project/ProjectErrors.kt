@@ -3,6 +3,7 @@ package nl.artifation.videoeditor.project
 import nl.artifation.videoeditor.errors.EditorError
 import nl.artifation.videoeditor.errors.ErrorLog
 import nl.artifation.videoeditor.errors.ErrorMapper
+import nl.artifation.videoeditor.errors.InputProblem
 
 /**
  * Wat er als bestandsnaam in de gebruikerstekst komt te staan.
@@ -149,6 +150,21 @@ public class ConcurrentWriteException(
     /** `StorageBusy` heeft geen veld voor ids; zonder deze regel is niet te zien wát er botste. */
     override val logLine: String get() = "${ErrorLog.line(error)} id=$id busyWith=$busyWithId"
 }
+
+/**
+ * Er ligt nog een niet-herstelde autosave.
+ *
+ * Bewerkingen die het hoofdbestand herschrijven — hernoemen, dupliceren — gooien
+ * de autosave op. Zolang de gebruiker niet heeft gekozen wat daarmee moet
+ * gebeuren, mag dat niet stilzwijgend gebeuren: dan verdwijnt werk dat hij nooit
+ * te zien heeft gekregen.
+ */
+public class PendingRecoveryException(
+    public val id: String,
+) : ProjectException(
+    "project '$id' heeft een openstaande herstelkeuze; open het project eerst",
+    EditorError.InvalidInput(InputProblem.UNRESOLVED_RECOVERY),
+)
 
 /**
  * De fout achter een willekeurige exceptie, of null als hij niet te duiden is.

@@ -48,6 +48,10 @@ public enum class InputProblem(public val message: String) {
     FILE_TOO_LARGE("Het bestand is te groot voor deze bewerking. Knip het eerst in kortere stukken en probeer het opnieuw."),
     UNSUPPORTED_LANGUAGE("Deze taal kan nog niet automatisch ondertiteld worden. Kies een andere taal en probeer het opnieuw."),
     NO_AUDIO_TRACK("Dit materiaal heeft geen geluid, dus er valt niets te ondertitelen. Kies een clip met geluid."),
+    UNRESOLVED_RECOVERY(
+        "Dit project heeft nog wijzigingen van een vorige keer die niet zijn afgerond. " +
+            "Open het project eerst en kies wat je daarmee wilt.",
+    ),
 }
 
 /**

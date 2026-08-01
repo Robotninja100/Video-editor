@@ -70,6 +70,16 @@ public data class AutosaveState(
     val lastEditAtMs: Long = 0L,
     /** null zolang dit project nog nooit is weggeschreven. */
     val lastWriteAtMs: Long? = null,
+    /**
+     * Wanneer de huidige reeks onopgeslagen bewerkingen begon.
+     *
+     * Dit is het anker voor de bovengrens zolang er nog nooit geschreven is.
+     * Zonder dit veld hing die grens aan de láátste bewerking en schoof hij dus
+     * bij elke bewerking mee — een nieuw project dat continu bewerkt wordt, zou
+     * daardoor nooit worden weggeschreven. Juist daar staat er niets op schijf
+     * om op terug te vallen.
+     */
+    val firstEditSinceWriteAtMs: Long? = null,
     val writeInProgress: Boolean = false,
 )
 
@@ -128,10 +138,7 @@ public object AutosavePolicy {
             )
         }
 
-        // Zonder eerdere schrijfactie loopt de bovengrens vanaf de eerste bewerking:
-        // een nieuw project mag niet dertig seconden ongeschreven blijven puur
-        // omdat er nog nooit iets is opgeslagen.
-        val hardDeadlineMs = (state.lastWriteAtMs ?: state.lastEditAtMs) + config.maxIntervalMs
+        val hardDeadlineMs = hardDeadlineOf(state, config)
         val quietDeadlineMs =
             state.lastEditAtMs + config.debounceMs(state.lastEditKind ?: EditKind.CONTINUOUS)
 
@@ -160,8 +167,31 @@ public object AutosavePolicy {
     }
 
     /** Toestand na een bewerking. */
+    /**
+     * De bovengrens: uiterlijk wanneer er geschreven moet zijn.
+     *
+     * Zonder eerdere schrijfactie loopt die vanaf de éérste onopgeslagen
+     * bewerking, niet vanaf de laatste. Anders schuift de grens bij elk
+     * bewerkinkje mee en wordt er tijdens doorlopend bewerken nooit geschreven —
+     * precies bij een nieuw project, waar niets op schijf staat om op terug te
+     * vallen.
+     */
+    private fun hardDeadlineOf(state: AutosaveState, config: AutosaveConfig): Long {
+        val anchorMs = state.lastWriteAtMs
+            ?: state.firstEditSinceWriteAtMs
+            ?: state.lastEditAtMs
+        return anchorMs + config.maxIntervalMs
+    }
+
     public fun onEdit(state: AutosaveState, kind: EditKind, nowMs: Long): AutosaveState =
-        state.copy(hasUnsavedChanges = true, lastEditKind = kind, lastEditAtMs = nowMs)
+        state.copy(
+            hasUnsavedChanges = true,
+            lastEditKind = kind,
+            lastEditAtMs = nowMs,
+            // Alleen de éérste bewerking van een reeks zet het anker.
+            firstEditSinceWriteAtMs = state.firstEditSinceWriteAtMs.takeIf { state.hasUnsavedChanges }
+                ?: nowMs,
+        )
 
     /**
      * Toestand na een geslaagde schrijfactie.
@@ -178,6 +208,9 @@ public object AutosavePolicy {
         state.copy(
             hasUnsavedChanges = state.lastEditAtMs > startedAtMs,
             lastWriteAtMs = finishedAtMs,
+            // Bewerkingen die tijdens het schrijven binnenkwamen beginnen een
+            // nieuwe reeks; de rest heeft geen anker meer nodig.
+            firstEditSinceWriteAtMs = state.lastEditAtMs.takeIf { it > startedAtMs },
             writeInProgress = false,
         )
 }

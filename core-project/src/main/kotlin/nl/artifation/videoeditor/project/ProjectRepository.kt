@@ -61,9 +61,15 @@ public class ProjectRepository(
 
             is RecoveryPlan.OpenSaved -> store.load(id, ProjectSlot.MAIN)
 
+            // Laden vóór verwijderen. `CrashRecovery` beslist op de kop van het
+            // bestand, en die decodeert ook als de inhoud eronder onleesbaar is.
+            // Andersom zou het weggooien van de autosave dus de enige leesbare
+            // kopie kunnen vernietigen op grond van een bestand dat vervolgens
+            // niet blijkt te laden.
             is RecoveryPlan.DiscardAutosave -> {
+                val file = store.load(id, ProjectSlot.MAIN)
                 store.deleteSlot(id, ProjectSlot.AUTOSAVE)
-                store.load(id, ProjectSlot.MAIN)
+                file
             }
 
             // Zonder goed bestand is de autosave het enige wat er is; dan valt er
@@ -80,8 +86,19 @@ public class ProjectRepository(
         store.deleteSlot(id, ProjectSlot.AUTOSAVE)
     }
 
-    public fun rename(id: String, name: String, nowMs: Long): ProjectFile =
-        save(store.load(id, ProjectSlot.MAIN).renamed(name, nowMs))
+    /**
+     * Hernoemt het project.
+     *
+     * Weigert zolang er een niet-herstelde autosave ligt. [save] ruimt de
+     * autosave namelijk op, en hernoemen gebeurt vanuit de projectenlijst — die
+     * leest alleen het hoofdbestand. Zonder deze wacht zou hernoemen na een
+     * crash stilzwijgend alle niet-opgeslagen bewerkingen weggooien, zonder dat
+     * de gebruiker het herstel ooit te zien kreeg.
+     */
+    public fun rename(id: String, name: String, nowMs: Long): ProjectFile {
+        requireRecoveryResolved(id)
+        return save(store.load(id, ProjectSlot.MAIN).renamed(name, nowMs))
+    }
 
     /**
      * Kopieert een project onder een nieuwe id.
@@ -92,6 +109,9 @@ public class ProjectRepository(
      */
     public fun duplicate(id: String, newId: String, name: String, nowMs: Long): ProjectFile {
         require(newId != id) { "een duplicaat moet een andere id krijgen dan '$id'" }
+        // Anders is de kopie stilzwijgend ouder dan wat de gebruiker het laatst
+        // op het scherm zag.
+        requireRecoveryResolved(id)
         val original = store.load(id, ProjectSlot.MAIN)
         val copy = ProjectFile.of(
             project = original.project.copy(id = newId),
@@ -113,6 +133,11 @@ public class ProjectRepository(
     private fun promoteAutosave(id: String): ProjectFile {
         val recovered = store.load(id, ProjectSlot.AUTOSAVE)
         return save(recovered)
+    }
+
+    /** Blokkeert bewerkingen die een openstaande herstelkeuze zouden overschrijven. */
+    private fun requireRecoveryResolved(id: String) {
+        if (plan(id) is RecoveryPlan.OfferAutosave) throw PendingRecoveryException(id)
     }
 
     private fun <T> exclusively(id: String, block: () -> T): T {

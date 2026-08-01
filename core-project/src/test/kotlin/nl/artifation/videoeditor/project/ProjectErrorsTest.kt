@@ -24,6 +24,7 @@ private val ALLE_FOUTEN: List<ProjectException> = listOf(
     UnsupportedSchemaVersionException(fileVersion = 4, supportedVersion = 3),
     ProjectNotFoundException("vakantie"),
     ConcurrentWriteException(id = "vakantie", busyWithId = "kerstfilm"),
+    PendingRecoveryException("vakantie"),
 )
 
 /** Woorden die niets te zoeken hebben in een tekst voor de gebruiker. */
@@ -123,6 +124,7 @@ class ProjectFoutClassificatieTest {
             "outdated_app" to false,
             "file_missing" to false,
             "storage_busy" to true,
+            "invalid_input" to false,
         )
 
         for (fout in ALLE_FOUTEN) {
