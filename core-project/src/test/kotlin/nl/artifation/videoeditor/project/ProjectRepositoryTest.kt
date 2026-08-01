@@ -193,6 +193,9 @@ class ProjectRepositoryTest {
         }
 
         assertEquals("p1", fout.busyWithId, "fout: ${fout.message}")
+        // De andere schrijfactie is zo klaar; dit is de enige projectfout waarbij
+        // de wachtrij het opnieuw mag proberen.
+        assertTrue(fout.retryable, "fout: ${fout.logLine}")
     }
 }
 

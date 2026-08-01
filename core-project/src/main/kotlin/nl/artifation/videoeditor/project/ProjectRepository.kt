@@ -72,8 +72,7 @@ public class ProjectRepository(
                 if (acceptAutosave || plan.saved == null) promoteAutosave(id)
                 else store.load(id, ProjectSlot.MAIN)
 
-            is RecoveryPlan.Unrecoverable ->
-                throw CorruptProjectException("project '$id' is niet te openen: ${plan.detail}")
+            is RecoveryPlan.Unrecoverable -> throw plan.asException()
         }
 
     /** Gooit de autosave weg; de gebruiker koos voor het opgeslagen bestand. */

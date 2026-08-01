@@ -18,7 +18,12 @@ public data class QueueSnapshot(
     val version: Int = CURRENT_VERSION,
 ) {
     public companion object {
-        public const val CURRENT_VERSION: Int = 1
+        /**
+         * Twee sinds `lastError` een `EditorError` is en geen vrije tekst meer:
+         * een bestand van versie 1 heeft daar een string staan en is dus niet
+         * meer te lezen. Het nummer is er juist om dat te kunnen zien.
+         */
+        public const val CURRENT_VERSION: Int = 2
     }
 }
 

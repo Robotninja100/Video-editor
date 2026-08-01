@@ -1,5 +1,9 @@
 package nl.artifation.videoeditor.jobs
 
+import nl.artifation.videoeditor.errors.EditorError
+import nl.artifation.videoeditor.errors.Jitter
+import nl.artifation.videoeditor.errors.RetryPolicy
+import nl.artifation.videoeditor.model.US_PER_MS
 import nl.artifation.videoeditor.model.Us
 
 /**
@@ -11,7 +15,9 @@ import nl.artifation.videoeditor.model.Us
  * terugmeldt. Daardoor is dit geheel deterministisch te testen.
  *
  * Alle tijdstippen komen van buiten binnen ([Us], microseconden); de klok wordt
- * hier nooit gelezen.
+ * hier nooit gelezen. Ook het wachten na een fout gebeurt niet met een `sleep`
+ * maar met een tijdstip op de taak ([Job.notBeforeUs]): de wachtrij slaat zo'n
+ * taak over tot de laag erboven met een later [Us] terugkomt.
  */
 public class JobQueue(
     private val gate: ThermalGate,
@@ -21,6 +27,22 @@ public class JobQueue(
      * telefoon: twee encoders naast elkaar maken het geheel trager én heter.
      */
     private val maxRunning: Int = 1,
+    /**
+     * De vórm van de wachttijd tussen twee pogingen: begintijd, groeifactor,
+     * bovengrens en de breedte van de jitter.
+     *
+     * Het pogingenaantal komt hier níét vandaan — dat is [Job.maxAttempts], zie
+     * [budgetFor]. Eén bron van waarheid per vraag: hoe vaak hoort bij de taak,
+     * hoe lang hoort bij de app.
+     */
+    private val policy: RetryPolicy = RetryPolicy(),
+    /**
+     * De willekeur in de wachttijd, van buiten meegegeven zodat de wachtrij
+     * deterministisch blijft. De standaard is bewust géén willekeur; de app
+     * geeft hier `Jitter.of(Random)` mee, anders komt na een storing de hele
+     * wachtrij op dezelfde milliseconde weer aankloppen.
+     */
+    private val jitter: Jitter = Jitter.NONE,
 ) {
     init {
         require(maxRunning >= 1) { "maxRunning moet >= 1 zijn, was $maxRunning" }
@@ -80,26 +102,46 @@ public class JobQueue(
     // ------------------------------------------------------------------- kiezen
 
     /**
-     * De taak die als eerste aan de beurt is, zonder de [ThermalGate] te
-     * raadplegen en zonder iets te veranderen. Voor de UI ("volgende: export").
+     * De taak die op [nowUs] als eerste aan de beurt is, zonder de [ThermalGate]
+     * te raadplegen en zonder iets te veranderen. Voor de UI ("volgende: export").
+     *
+     * Het tijdstip is nodig sinds een mislukte taak een wachttijd meekrijgt:
+     * zonder klok zou hier een taak uitkomen die nog minuten in zijn backoff zit,
+     * en dan belooft de UI werk dat nog niet mag beginnen.
      */
-    public fun nextCandidate(): Job? = jobs.values
-        .filter { it.state == JobState.Queued }
+    public fun nextCandidate(nowUs: Us): Job? = jobs.values
+        .filter { it.state == JobState.Queued && it.isDue(nowUs) }
         .minWithOrNull(QUEUE_ORDER)
+
+    /**
+     * Wanneer [startNext] op zijn vroegst weer iets kan opleveren, of null als er
+     * niets meer in de wachtrij staat.
+     *
+     * De laag erboven heeft dit nodig om zichzelf te laten wekken: zonder dit
+     * antwoord blijft een wachtrij die alleen nog wachtende taken bevat stilstaan
+     * tot er toevallig iets anders gebeurt. [nowUs] zelf betekent "er is nu werk".
+     */
+    public fun nextReadyUs(nowUs: Us): Us? {
+        val queued = jobs.values.filter { it.state == JobState.Queued }
+        if (queued.isEmpty()) return null
+        if (queued.any { it.isDue(nowUs) }) return nowUs
+        return queued.mapNotNull { it.notBeforeUs }.minOrNull()
+    }
 
     /**
      * Kiest de volgende taak en zet hem op `Running`.
      *
-     * Geeft `null` als er niets te doen is, als er al genoeg draait, of als de
-     * gate nu geen werk toestaat. De gate wordt vóór het kiezen geraadpleegd:
-     * bij een geblokkeerde gate verandert er niets aan de wachtrij, zodat de
-     * volgorde na het afkoelen exact hetzelfde is.
+     * Geeft `null` als er niets te doen is, als alles wat wacht nog in zijn
+     * backoff zit, als er al genoeg draait, of als de gate nu geen werk toestaat.
+     * De gate wordt vóór het kiezen geraadpleegd: bij een geblokkeerde gate
+     * verandert er niets aan de wachtrij, zodat de volgorde na het afkoelen exact
+     * hetzelfde is.
      */
     public fun startNext(nowUs: Us): JobLease? {
         if (runningCount() >= maxRunning) return null
         val allowance = gate.allowance(nowUs)
         if (!allowance.mayWork) return null
-        val next = nextCandidate() ?: return null
+        val next = nextCandidate(nowUs) ?: return null
         val started = store(next.withState(JobState.Running, nowUs))
         return JobLease(started, allowance.chunkUs)
     }
@@ -131,16 +173,24 @@ public class JobQueue(
     /**
      * Meldt een mislukte poging.
      *
-     * @param retryable of het zin heeft het nog eens te proberen. Deze module
-     *   verzint geen eigen foutentaxonomie — of een fout tijdelijk is (netwerk)
-     *   of blijvend (kapot bronbestand) weet `:core-errors`, niet de wachtrij.
+     * Of het zin heeft het nog eens te proberen staat in [error] zelf; de
+     * wachtrij oordeelt daar niet meer over. Deze module verzint ook geen eigen
+     * foutentaxonomie — of een fout tijdelijk is (netwerk) of blijvend (kapot
+     * bronbestand) weet `:core-errors`.
+     *
+     * Bij een herhaalbare fout gaat de taak terug de wachtrij in met een
+     * wachttijd uit [policy]; bij een blijvende fout of een opgebruikt budget is
+     * hij meteen definitief mislukt. In beide gevallen blijft [error] op de taak
+     * staan, zodat de UI er een fatsoenlijke zin uit kan halen.
      */
-    public fun fail(id: String, nowUs: Us, reason: String, retryable: Boolean): Job {
+    public fun fail(id: String, nowUs: Us, error: EditorError): Job {
         val job = jobOrThrow(id)
-        if (!retryable || !job.canRetry) {
-            return store(job.withState(JobState.Failed, nowUs).copy(lastError = reason))
+        // Eerst de overgang toetsen: anders zou hieronder de wachttijd berekend
+        // worden voor een poging die nooit begonnen is.
+        if (!JobStateMachine.isAllowed(job.state, JobState.Failed)) {
+            throw IllegalJobTransition(id, job.state, JobState.Failed)
         }
-        return store(requeue(job, nowUs, reason))
+        return store(afterFailure(job, nowUs, error, policy, jitter))
     }
 
     public fun cancel(id: String, nowUs: Us): Job =
@@ -244,8 +294,6 @@ public class JobQueue(
         private val QUEUE_ORDER: Comparator<Job> =
             compareByDescending<Job> { it.priority.weight }.thenBy { it.enqueuedAtUs }
 
-        internal const val INTERRUPTED: String = "onderbroken door een herstart van het proces"
-
         /**
          * Laadt een opgeslagen wachtrij en herstelt taken die stonden te draaien
          * toen het proces stierf.
@@ -254,22 +302,80 @@ public class JobQueue(
          * blokkeert dan een plek en wordt nooit meer gekozen. Hij gaat dus terug
          * de wachtrij in — mét de al verbruikte poging, want een taak die het
          * proces sloopt moet niet oneindig blijven herstarten.
+         *
+         * @param interrupted waaróp het proces stierf, als de aanroeper dat weet
+         *   (op Android leest die `ApplicationExitInfo`). Standaard null: de
+         *   wachtrij verzint geen reden. Vroeger stond hier een vaste tekst
+         *   "onderbroken door een herstart", maar die overschreef juist de echte
+         *   fout van de vorige poging — precies wat na een herstart bewaard moet
+         *   blijven. Een niet-herhaalbare [interrupted] laat de taak meteen
+         *   mislukken; een herhaalbare levert gewoon een wachttijd op.
          */
         public fun restore(
             snapshot: QueueSnapshot,
             nowUs: Us,
             gate: ThermalGate,
             maxRunning: Int = 1,
+            policy: RetryPolicy = RetryPolicy(),
+            jitter: Jitter = Jitter.NONE,
+            interrupted: EditorError? = null,
         ): JobQueue {
             val repaired = snapshot.jobs.map { job ->
+                // Een niet-voor-tijdstip van vóór de herstart is niets meer
+                // waard: het hangt aan een klok die intussen opnieuw bij nul kan
+                // zijn begonnen, en een onbereikbaar tijdstip zou de wachtrij
+                // voorgoed laten stilstaan. De herstart heeft zelf al tijd gekost.
+                val due = job.copy(notBeforeUs = null)
                 when {
-                    job.state != JobState.Running -> job
-                    job.canRetry -> requeue(job, nowUs, INTERRUPTED)
-                    else -> job.withState(JobState.Failed, nowUs).copy(lastError = INTERRUPTED)
+                    due.state != JobState.Running -> due
+                    interrupted != null -> afterFailure(due, nowUs, interrupted, policy, jitter)
+                    due.canRetry -> requeue(due, nowUs, error = null, delayMs = 0L)
+                    else -> due.withState(JobState.Failed, nowUs)
                 }
             }
-            return JobQueue(gate = gate, initial = repaired, maxRunning = maxRunning)
+            return JobQueue(
+                gate = gate,
+                initial = repaired,
+                maxRunning = maxRunning,
+                policy = policy,
+                jitter = jitter,
+            )
         }
+
+        /**
+         * Wat er met een draaiende taak gebeurt na [error]: terug in de wachtrij
+         * met een wachttijd, of definitief mislukt.
+         *
+         * Eén vraag aan [RetryPolicy] beslist beide. Dat kan omdat het budget van
+         * de taak in de policy wordt gezet ([budgetFor]): `delayMsFor` geeft dan
+         * precies null als de fout blijvend is óf de pogingen op zijn, en anders
+         * de wachttijd — inclusief een `Retry-After` die de dienst zelf opgaf.
+         */
+        private fun afterFailure(
+            job: Job,
+            nowUs: Us,
+            error: EditorError,
+            policy: RetryPolicy,
+            jitter: Jitter,
+        ): Job {
+            // Een handgemaakte momentopname kan een draaiende taak bevatten die
+            // nog geen poging op zijn naam heeft; de policy telt vanaf één.
+            val attempts = job.attempts.coerceAtLeast(1)
+            val delayMs = budgetFor(job, policy).delayMsFor(error, attempts, jitter)
+                ?: return job.withState(JobState.Failed, nowUs).copy(lastError = error)
+            return requeue(job, nowUs, error, delayMs)
+        }
+
+        /**
+         * De policy met het pogingenbudget van de taak erin.
+         *
+         * `Job.maxAttempts` en `RetryPolicy.maxAttempts` zouden anders allebei
+         * over hetzelfde gaan en vroeg of laat uit elkaar lopen. De taak wint,
+         * want daar staat het al per taak in te stellen; de policy houdt de vorm
+         * van de wachttijd.
+         */
+        private fun budgetFor(job: Job, policy: RetryPolicy): RetryPolicy =
+            if (policy.maxAttempts == job.maxAttempts) policy else policy.copy(maxAttempts = job.maxAttempts)
 
         /**
          * Terug de wachtrij in na een fout of een herstart.
@@ -278,9 +384,12 @@ public class JobQueue(
          * voortgang ook terug naar nul — anders belooft de balk werk dat opnieuw
          * gedaan wordt.
          */
-        private fun requeue(job: Job, nowUs: Us, reason: String): Job =
+        private fun requeue(job: Job, nowUs: Us, error: EditorError?, delayMs: Long): Job =
             job.withState(JobState.Queued, nowUs).copy(
-                lastError = reason,
+                // Zonder nieuwe fout blijft de oude staan: de UI heeft liever de
+                // laatste échte reden dan geen reden.
+                lastError = error ?: job.lastError,
+                notBeforeUs = (nowUs + delayMs * US_PER_MS).takeIf { delayMs > 0L },
                 progress = if (job.resumeToken == null) 0f else job.progress,
             )
     }

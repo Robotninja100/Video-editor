@@ -67,8 +67,64 @@ class JobPersistenceTest {
 
         val job = na.job("export")!!
         assertEquals(JobState.Queued, job.state, "toestand was ${job.state}")
-        assertNotNull(job.lastError, "de onderbreking hoort zichtbaar te zijn")
-        assertEquals("export", na.nextCandidate()?.id, "de taak hoort weer gekozen te kunnen worden")
+        assertEquals(
+            "export",
+            na.nextCandidate(nowUs = 999L)?.id,
+            "de taak hoort weer gekozen te kunnen worden",
+        )
+    }
+
+    @Test
+    fun `de fout van voor de herstart blijft staan`() {
+        val queue = JobQueue(openGate(), policy = ZONDER_WACHTTIJD)
+        queue.submit(exportJob("export"))
+        queue.startNext(nowUs = 10L)
+        queue.fail("export", nowUs = 20L, error = teVaak(retryAfterMs = null))
+        queue.startNext(nowUs = 30L)
+
+        val na = JobQueue.restore(rondje(queue), nowUs = 999L, gate = openGate())
+
+        // Precies waarvoor de fout op de taak bewaard wordt: na het opstarten
+        // kan het scherm nog vertellen waarom het de vorige keer misging.
+        val job = na.job("export")!!
+        assertEquals(teVaak(retryAfterMs = null), job.lastError, "lastError was ${job.lastError}")
+        assertNotNull(job.lastError?.userMessage, "er hoort een zin voor de gebruiker te zijn")
+    }
+
+    @Test
+    fun `een opgegeven onderbreking komt op de taak te staan`() {
+        val queue = JobQueue(openGate())
+        queue.submit(exportJob("export"))
+        queue.startNext(nowUs = 10L)
+
+        // De laag erboven weet soms waaróp het proces stierf; alleen dan staat
+        // er een reden op de taak.
+        val na = JobQueue.restore(
+            rondje(queue),
+            nowUs = 999L,
+            gate = openGate(),
+            interrupted = BRON_KAPOT,
+        )
+
+        val job = na.job("export")!!
+        assertEquals(JobState.Failed, job.state, "een blijvende onderbreking hoort niet terug te komen: ${job.state}")
+        assertEquals(BRON_KAPOT, job.lastError, "lastError was ${job.lastError}")
+    }
+
+    @Test
+    fun `een wachttijd van voor de herstart telt niet meer mee`() {
+        val queue = JobQueue(openGate())
+        queue.submit(exportJob("export"))
+        queue.startNext(nowUs = 10L)
+        queue.fail("export", nowUs = 20L, error = NETWERK_WEG)
+
+        // De klok die de wachtrij voedt kan na een herstart opnieuw bij nul
+        // beginnen; een onbereikbaar tijdstip zou de wachtrij voorgoed stilzetten.
+        val na = JobQueue.restore(rondje(queue), nowUs = 0L, gate = openGate())
+
+        val job = na.job("export")!!
+        assertNull(job.notBeforeUs, "notBeforeUs was ${job.notBeforeUs}")
+        assertEquals("export", na.nextCandidate(nowUs = 0L)?.id, "de taak hoort meteen weer te kunnen")
     }
 
     @Test
@@ -94,7 +150,7 @@ class JobPersistenceTest {
         val job = na.job("export")!!
         assertEquals(JobState.Failed, job.state, "toestand was ${job.state}")
         assertEquals(999L, job.finishedAtUs, "finishedAtUs was ${job.finishedAtUs}")
-        assertNull(na.nextCandidate(), "er hoorde niets meer te kiezen te zijn")
+        assertNull(na.nextCandidate(nowUs = 999L), "er hoorde niets meer te kiezen te zijn")
     }
 
     @Test
@@ -156,7 +212,7 @@ class JobPersistenceTest {
     fun `het opgeslagen bestand draagt een versie`() {
         val json = JobQueueJson.encode(JobQueue(openGate()).snapshot())
 
-        assertTrue(json.contains("\"version\": 1"), "json was: $json")
+        assertTrue(json.contains("\"version\": 2"), "json was: $json")
     }
 
     @Test

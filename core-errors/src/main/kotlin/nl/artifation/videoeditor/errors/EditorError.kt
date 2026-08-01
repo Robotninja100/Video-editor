@@ -156,6 +156,60 @@ public sealed interface EditorError {
                 "Zet het om naar MP4 en voeg het daarna opnieuw toe."
     }
 
+    /**
+     * Een projectbestand is beschadigd of afgebroken.
+     *
+     * Bewust niet [FileUnreadable]: die raadt aan het bestand opnieuw naar het
+     * toestel te kopiëren, en een project komt nergens vandaan — het staat alleen
+     * hier. De handeling is een eerdere versie openen of opnieuw beginnen.
+     */
+    @Serializable
+    @SerialName("project_damaged")
+    public data class ProjectDamaged(val detail: String? = null) : EditorError {
+        override val code: String get() = "project_damaged"
+        override val retryable: Boolean get() = false
+        override val userMessage: String
+            get() = "Dit project kan niet geopend worden omdat het bestand beschadigd is. " +
+                "Open een eerdere versie of begin een nieuw project."
+    }
+
+    /**
+     * Het bestand vraagt om een nieuwere versie van de app dan deze.
+     *
+     * Bewust een eigen variant en niet [UnsupportedMedia]: die raadt aan het
+     * materiaal naar MP4 om te zetten, en dat is voor een projectbestand
+     * onzinnig advies. De juiste handeling is de app bijwerken.
+     */
+    @Serializable
+    @SerialName("outdated_app")
+    public data class OutdatedApp(
+        val fileVersion: Int,
+        val supportedVersion: Int,
+    ) : EditorError {
+        override val code: String get() = "outdated_app"
+        override val retryable: Boolean get() = false
+        override val userMessage: String
+            get() = "Dit project is gemaakt met een nieuwere versie van de app. " +
+                "Werk de app bij en open het daarna opnieuw."
+    }
+
+    /**
+     * De opslag is bezet doordat er al een schrijfactie loopt.
+     *
+     * Wel opnieuw te proberen, in tegenstelling tot de andere opslagfouten: de
+     * vorige schrijfactie is zo klaar. Zonder eigen variant zou dit moeten lenen
+     * van een dienstfout, en dan liegt de tekst over waar het probleem zit.
+     */
+    @Serializable
+    @SerialName("storage_busy")
+    public data class StorageBusy(val detail: String? = null) : EditorError {
+        override val code: String get() = "storage_busy"
+        override val retryable: Boolean get() = true
+        override val userMessage: String
+            get() = "Er wordt op dit moment al iets anders opgeslagen. " +
+                "Wacht even en probeer het daarna opnieuw."
+    }
+
     /** De decoder of encoder gaf er halverwege de bewerking de brui aan. */
     @Serializable
     @SerialName("codec_failure")

@@ -13,7 +13,7 @@ class JobQueueTest {
     fun `een lege wachtrij levert geen taak`() {
         val queue = JobQueue(openGate())
 
-        assertNull(queue.nextCandidate(), "een lege wachtrij hoort niets te bieden")
+        assertNull(queue.nextCandidate(nowUs = 0L), "een lege wachtrij hoort niets te bieden")
         assertNull(queue.startNext(nowUs = 1L), "een lege wachtrij hoort niets te starten")
         assertEquals(0, queue.size, "size was ${queue.size}")
     }
@@ -25,7 +25,7 @@ class JobQueueTest {
         queue.submit(analysisJob("normaal", enqueuedAtUs = 1L, priority = JobPriority.Normal))
         queue.submit(exportJob("hoog", enqueuedAtUs = 2L, priority = JobPriority.High))
 
-        assertEquals("hoog", queue.nextCandidate()?.id, "gekozen: ${queue.nextCandidate()}")
+        assertEquals("hoog", queue.nextCandidate(nowUs = 0L)?.id, "gekozen: ${queue.nextCandidate(nowUs = 0L)}")
         assertEquals(
             listOf("hoog", "normaal", "laag"),
             queue.all.map { it.id },
@@ -39,7 +39,7 @@ class JobQueueTest {
         queue.submit(analysisJob("jong", enqueuedAtUs = 900L))
         queue.submit(analysisJob("oud", enqueuedAtUs = 100L))
 
-        assertEquals("oud", queue.nextCandidate()?.id, "gekozen: ${queue.nextCandidate()}")
+        assertEquals("oud", queue.nextCandidate(nowUs = 0L)?.id, "gekozen: ${queue.nextCandidate(nowUs = 0L)}")
     }
 
     @Test
@@ -48,7 +48,7 @@ class JobQueueTest {
         queue.submit(analysisJob("eerst", enqueuedAtUs = 100L))
         queue.submit(analysisJob("daarna", enqueuedAtUs = 100L))
 
-        assertEquals("eerst", queue.nextCandidate()?.id, "gekozen: ${queue.nextCandidate()}")
+        assertEquals("eerst", queue.nextCandidate(nowUs = 0L)?.id, "gekozen: ${queue.nextCandidate(nowUs = 0L)}")
     }
 
     @Test
@@ -81,7 +81,7 @@ class JobQueueTest {
         queue.submit(analysisJob("a", enqueuedAtUs = 0L))
         queue.pause("a", nowUs = 5L)
 
-        assertNull(queue.nextCandidate(), "gepauzeerd hoort onzichtbaar te zijn voor de keuze")
+        assertNull(queue.nextCandidate(nowUs = 0L), "gepauzeerd hoort onzichtbaar te zijn voor de keuze")
         assertNull(queue.startNext(nowUs = 6L), "gepauzeerd hoort niet te starten")
     }
 
@@ -101,13 +101,13 @@ class JobQueueTest {
         queue.submit(analysisJob("oud", enqueuedAtUs = 100L))
         queue.submit(analysisJob("jong", enqueuedAtUs = 200L))
         queue.pause("oud", nowUs = 300L)
-        assertEquals("jong", queue.nextCandidate()?.id, "zolang 'oud' pauzeert is 'jong' aan de beurt")
+        assertEquals("jong", queue.nextCandidate(nowUs = 0L)?.id, "zolang 'oud' pauzeert is 'jong' aan de beurt")
 
         queue.resume("oud", nowUs = 400L)
 
         // Hervatten laat enqueuedAtUs met rust; anders raakt een taak die je even
         // pauzeert stelselmatig achteraan.
-        assertEquals("oud", queue.nextCandidate()?.id, "gekozen: ${queue.nextCandidate()}")
+        assertEquals("oud", queue.nextCandidate(nowUs = 0L)?.id, "gekozen: ${queue.nextCandidate(nowUs = 0L)}")
     }
 
     @Test
@@ -210,7 +210,7 @@ class JobQueueTest {
         queue.submit(analysisJob("a"))
 
         assertFailsWith<IllegalJobTransition> {
-            queue.fail("a", nowUs = 10L, reason = "netwerk", retryable = true)
+            queue.fail("a", nowUs = 10L, error = NETWERK_WEG)
         }
     }
 

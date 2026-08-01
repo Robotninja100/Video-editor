@@ -1,5 +1,9 @@
 package nl.artifation.videoeditor.jobs
 
+import nl.artifation.videoeditor.errors.EditorError
+import nl.artifation.videoeditor.errors.Jitter
+import nl.artifation.videoeditor.errors.RemoteService
+import nl.artifation.videoeditor.errors.RetryPolicy
 import nl.artifation.videoeditor.model.US_PER_SECOND
 import nl.artifation.videoeditor.model.Us
 
@@ -66,3 +70,25 @@ internal fun exportJob(
 
 /** Zet een taak op `Running` zonder de wachtrij; handig voor toestandstests. */
 internal fun Job.running(nowUs: Us = 1L): Job = withState(JobState.Running, nowUs)
+
+/** Een storing die overwaait: hierna hoort een taak terug in de wachtrij te komen. */
+internal val NETWERK_WEG: EditorError = EditorError.NetworkUnavailable()
+
+/** Een fout die door herhalen niet beter wordt. */
+internal val BRON_KAPOT: EditorError = EditorError.FileUnreadable(path = "content://clips/export")
+
+/** Een dienst die zelf zegt hoe lang je weg moet blijven. */
+internal fun teVaak(retryAfterMs: Long?): EditorError =
+    EditorError.RateLimited(service = RemoteService.TRANSCRIPTION, retryAfterMs = retryAfterMs)
+
+/**
+ * Een vaste jitterwaarde. `0.5` is het midden van het bereik en laat de berekende
+ * wachttijd onveranderd; andere waarden schuiven hem omlaag of omhoog.
+ */
+internal fun jitterVan(value: Double): Jitter = Jitter { value }
+
+/**
+ * Beleid zonder wachttijd, voor tests waarin alleen de boekhouding rond opnieuw
+ * proberen het onderwerp is. Zo hoeft daar geen tijd vooruitgezet te worden.
+ */
+internal val ZONDER_WACHTTIJD: RetryPolicy = RetryPolicy(baseDelayMs = 0L, maxDelayMs = 0L)

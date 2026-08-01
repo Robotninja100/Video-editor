@@ -104,7 +104,7 @@ class JobProgressTest {
         queue.succeed("analyse", nowUs = 11L)
         queue.startNext(nowUs = 12L)
 
-        queue.fail("export", nowUs = 13L, reason = "bronbestand kapot", retryable = false)
+        queue.fail("export", nowUs = 13L, error = BRON_KAPOT)
 
         val voortgang = queue.progress()
         assertEquals(1f, voortgang.fraction, "fraction was ${voortgang.fraction}")
@@ -118,7 +118,7 @@ class JobProgressTest {
         queue.startNext(nowUs = 10L)
         queue.reportProgress("export", 0.5f)
 
-        queue.fail("export", nowUs = 20L, reason = "netwerk weg", retryable = true)
+        queue.fail("export", nowUs = 20L, error = NETWERK_WEG)
 
         val voortgang = queue.progress()
         assertEquals(300_000_000L, voortgang.totalWorkUs, "totalWorkUs was ${voortgang.totalWorkUs}")

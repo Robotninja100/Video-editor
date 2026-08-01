@@ -34,7 +34,19 @@ public sealed interface RecoveryPlan {
     ) : RecoveryPlan
 
     /** Er is wel iets, maar niets ervan is te lezen. */
-    public data class Unrecoverable(val id: String, val detail: String) : RecoveryPlan
+    public data class Unrecoverable(val id: String, val detail: String) : RecoveryPlan {
+
+        /**
+         * Dezelfde uitkomst als fout, met een tekst voor de gebruiker erbij.
+         *
+         * [detail] is een ontwikkelaarstekst; een scherm dat die zou tonen, is
+         * precies waar `:core-errors` voor bestaat. Via deze fout komt de UI aan
+         * `userMessage` zonder de melding zelf te bedenken, en houdt
+         * [ProjectRepository.open] één bron voor wat er misging.
+         */
+        public fun asException(): CorruptProjectException =
+            CorruptProjectException("project '$id' is niet te openen: $detail")
+    }
 
     public enum class DiscardReason {
         /** Half weggeschreven of anderszins stuk — precies waar de MAIN-kopie voor is. */

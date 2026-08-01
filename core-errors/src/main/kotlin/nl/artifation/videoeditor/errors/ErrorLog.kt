@@ -69,6 +69,12 @@ public object ErrorLog {
             "file=${fileNameOf(error.path)}",
             error.formatHint?.let { "format=${detail(it)}" },
         )
+        is EditorError.ProjectDamaged -> listOfNotNull(error.detail?.let { "detail=${detail(it)}" })
+        is EditorError.OutdatedApp -> listOf(
+            "fileVersion=${error.fileVersion}",
+            "supported=${error.supportedVersion}",
+        )
+        is EditorError.StorageBusy -> listOfNotNull(error.detail?.let { "detail=${detail(it)}" })
         is EditorError.CodecFailure -> listOfNotNull(
             "stage=${error.stage.name}",
             error.path?.let { "file=${fileNameOf(it)}" },
