@@ -19,6 +19,8 @@ rootProject.name = "video-editor"
 // Pure-JVM modules: bouwen en testen zonder Android SDK of toestel.
 include(":core-model")
 include(":core-analysis")
+include(":core-remote")
+include(":core-design")
 
 // Android-modules worden toegevoegd zodra de Android SDK beschikbaar is:
 //   :app  :core-render  :ml-whisper  :ml-tracking
