@@ -13,12 +13,11 @@ De fundering staat: de twee modules die géén Android SDK nodig hebben, met tes
 
 | Module | Status | Inhoud |
 |---|---|---|
-| `:core-model` | ✅ | Timeline-model, bewerkingen, validatie, JSON-persistentie |
-| `:core-analysis` | ✅ | Stiltedetectie (RMS + hysterese) |
+| `:core-model` | ✅ | Timeline-model, bewerkingen, validatie, JSON-persistentie, transcript-sidecar |
+| `:core-analysis` | ✅ | Stiltedetectie (RMS + hysterese), cut-list-validatie voor auto-edit |
 | `:core-render` | ⬜ | `toComposition()`, `MaskedBlurShaderProgram` — vereist Android SDK |
 | `:app` | ⬜ | Compose-UI en timeline |
-| `:ml-whisper` | ⬜ | whisper.cpp via JNI |
-| `:ml-tracking` | ⬜ | EdgeTAM via QNN |
+| `:core-remote` | ⬜ | Transcriptie (Groq), segmentatie (SAM 3), auto-edit (Claude) |
 
 `:core-model` en `:core-analysis` zijn bewust pure JVM. Daardoor draaien hun tests
 zonder emulator of toestel, en dat is precies waar de stille regressies zitten:
@@ -27,7 +26,7 @@ tijdlijnrekenwerk en DSP.
 ## Bouwen
 
 ```bash
-./gradlew test          # alle unittests (37, pure JVM)
+./gradlew test          # alle unittests (49, pure JVM)
 ./gradlew :core-model:test
 ```
 
@@ -38,9 +37,14 @@ fase 0 in het bouwplan.
 
 Twee dingen die je bij elke wijziging moet aanhouden — de rest volgt daaruit.
 
-**AI raakt de renderloop nooit.** Analyse gebeurt offline en schrijft sidecar-bestanden
+**AI raakt de renderloop nooit.** Analyse gebeurt vooraf en schrijft sidecar-bestanden
 weg naast het bronmateriaal. De renderpipeline leest die bestanden alleen. Geen
 modelinferentie tijdens playback, ooit.
+
+Daardoor is het ook een vrije keuze of een analyse op het toestel of in de cloud
+draait: de sidecar-formaten zijn identiek, dus de renderpipeline merkt het verschil
+niet. Transcriptie en segmentatie gaan naar externe diensten, stiltedetectie en
+reframe-detectie blijven lokaal. Zie het bouwplan voor de afweging.
 
 **Media3 is de backend, niet het projectformaat.** `:core-model` bevat geen enkel
 Media3-type. De vertaling gebeurt in één functie in `:core-render`. Zolang dat het
