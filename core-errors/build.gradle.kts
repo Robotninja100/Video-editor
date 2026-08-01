@@ -4,6 +4,9 @@ plugins {
 }
 
 dependencies {
+    // Een mislukte taak blijft met fout en al in de wachtrij op schijf staan.
+    api(libs.kotlinx.serialization.json)
+
     testImplementation(kotlin("test"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
