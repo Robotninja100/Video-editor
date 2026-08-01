@@ -33,11 +33,28 @@ public data class CaptionConfig(
 
 public object CaptionLayout {
 
-    /** Bouwt cues uit alle woorden in het transcript. */
+    /**
+     * Bouwt cues uit het transcript.
+     *
+     * Woordtijden geven de mooiste indeling en maken karaoke-highlighting
+     * mogelijk, maar ze zijn optioneel: niet elke dienst levert ze. Ontbreken ze,
+     * dan wordt er teruggevallen op de segmenttijden. Zonder die terugval levert
+     * een transcript zonder woordtijden stilzwijgend nul ondertitels op.
+     */
     public fun fromTranscript(
         transcript: Transcript,
         config: CaptionConfig = CaptionConfig(),
-    ): List<Cue> = fromWords(transcript.segments.flatMap { it.words }, config)
+    ): List<Cue> {
+        val words = transcript.segments.flatMap { it.words }
+        if (words.isNotEmpty()) return fromWords(words, config)
+
+        return fromWords(
+            transcript.segments
+                .filter { it.text.isNotBlank() && it.endUs > it.startUs }
+                .map { Cue.Word(it.startUs, it.endUs, it.text.trim()) },
+            config,
+        )
+    }
 
     public fun fromWords(
         words: List<Cue.Word>,
@@ -58,11 +75,17 @@ public object CaptionLayout {
 
         for (word in sorted) {
             if (group.isNotEmpty()) {
-                val candidateChars = group.sumOf { it.text.length + 1 } + word.text.length
                 val gapUs = word.startUs - group.last().endUs
                 val spanUs = word.endUs - group.first().startUs
 
-                if (candidateChars > config.maxChars ||
+                // Het tekenbudget is een benadering die te ruim kan uitvallen:
+                // drie woorden van 20 tekens passen binnen 2 × 32 tekens en
+                // breken alsnog naar drie regels. Daarom wordt hier echt
+                // afgebroken en geteld, in plaats van tekens op te tellen.
+                val kandidaat = (group + word).joinToString(" ") { it.text }
+                val teVeelRegels = wrap(kandidaat, config.maxCharsPerLine).size > config.maxLines
+
+                if (teVeelRegels ||
                     gapUs > config.splitOnGapUs ||
                     spanUs > config.maxDurationUs
                 ) {

@@ -3,6 +3,7 @@ package nl.artifation.videoeditor.model
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -212,5 +213,50 @@ class RulerTest {
     @Test
     fun `een lege breedte levert geen streepjes op`() {
         assertEquals(emptyList(), geometry().ticks(0f))
+    }
+}
+
+/**
+ * Twee randgevallen die de oorspronkelijke tests net misten: ze probeerden
+ * telkens een paar pixels *voorbij* de grens in plaats van erop.
+ */
+class HitTestRandenTest {
+
+    private val sequences = listOf(
+        Sequence("video", listOf(clip("a", 2_000_000L))),
+        Sequence("audio", listOf(clip("c", 5_000_000L))),
+    )
+
+    @Test
+    fun `de onderrand van een track hoort al bij het gat`() {
+        val g = geometry()
+        val precies = g.trackTop(0) + g.trackHeightPx
+
+        assertNull(
+            g.hitTest(sequences, x = 50f, y = precies),
+            "een track beslaat [top, top + hoogte); de bovengrens is het gat",
+        )
+    }
+
+    @Test
+    fun `de bovenrand van een track telt wel mee`() {
+        val g = geometry()
+        assertNotNull(g.hitTest(sequences, x = 50f, y = g.trackTop(0)))
+    }
+
+    @Test
+    fun `links van de tijdlijn raakt niets`() {
+        val g = geometry()
+
+        assertNull(
+            g.hitTest(sequences, x = -500f, y = g.trackTop(0) + 10f),
+            "timeAt klemt naar 0, maar de vinger zit buiten de tijdlijn",
+        )
+    }
+
+    @Test
+    fun `precies op de oorsprong raakt wel`() {
+        val g = geometry()
+        assertNotNull(g.hitTest(sequences, x = 0f, y = g.trackTop(0) + 10f))
     }
 }

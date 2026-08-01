@@ -1,6 +1,8 @@
 package nl.artifation.videoeditor.analysis
 
 import nl.artifation.videoeditor.model.Cue
+import nl.artifation.videoeditor.model.Transcript
+import nl.artifation.videoeditor.model.TranscriptSegment
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -138,5 +140,104 @@ class CaptionDurationTest {
 
         assertEquals(2, cues.size)
         assertTrue(cues[0].endUs <= cues[1].startUs, "eerste blok loopt over het tweede heen")
+    }
+}
+
+/**
+ * `maxLines` werd alleen als tekenbudget gebruikt (`maxCharsPerLine * maxLines`).
+ * Dat is een benadering die te ruim uitvalt: woorden die net niet op een regel
+ * passen, breken naar een extra regel terwijl het totaal binnen het budget bleef.
+ */
+class CaptionRegellimietTest {
+
+    @Test
+    fun `een blok blijft binnen het maximale aantal regels`() {
+        val lange = List(6) { "woordvanwintigtekens" }
+            .mapIndexed { i, w -> Cue.Word(i * 400_000L, (i + 1) * 400_000L, w) }
+
+        val cues = CaptionLayout.fromWords(lange, CaptionConfig(maxCharsPerLine = 32, maxLines = 2))
+
+        for (cue in cues) {
+            assertTrue(
+                cue.text.split("\n").size <= 2,
+                "blok met ${cue.text.split("\n").size} regels: '${cue.text}'",
+            )
+        }
+    }
+
+    @Test
+    fun `ook bij een regel per blok wordt de limiet gerespecteerd`() {
+        val cues = CaptionLayout.fromWords(
+            evenWords("een twee drie vier vijf zes"),
+            CaptionConfig(maxCharsPerLine = 10, maxLines = 1),
+        )
+
+        assertTrue(cues.all { "\n" !in it.text }, "gevonden: ${cues.map { it.text }}")
+    }
+}
+
+/**
+ * Woordtijden zijn optioneel — niet elke dienst levert ze. Zonder terugval op de
+ * segmenttijden leverde zo'n transcript stilzwijgend nul ondertitels op.
+ */
+class CaptionZonderWoordtijdenTest {
+
+    @Test
+    fun `een transcript met alleen segmenttijden levert toch cues op`() {
+        val transcript = Transcript(
+            listOf(
+                TranscriptSegment(0, 0L, 1_000_000L, "hallo daar"),
+                TranscriptSegment(1, 1_200_000L, 2_400_000L, "en tot ziens"),
+            ),
+        )
+
+        val cues = CaptionLayout.fromTranscript(transcript)
+
+        // Twee korte segmenten dicht op elkaar horen gewoon samengevoegd te
+        // worden; waar het om gaat is dat er überhaupt ondertitels uitkomen.
+        assertTrue(cues.isNotEmpty(), "een transcript zonder woordtijden gaf niets")
+        assertEquals(0L, cues.first().startUs)
+        assertEquals(
+            "hallo daar en tot ziens",
+            cues.joinToString(" ") { it.text.replace("\n", " ") },
+            "de tekst hoort volledig terug te komen",
+        )
+    }
+
+    @Test
+    fun `segmenten ver uit elkaar blijven aparte cues`() {
+        val transcript = Transcript(
+            listOf(
+                TranscriptSegment(0, 0L, 1_000_000L, "hallo daar"),
+                TranscriptSegment(1, 5_000_000L, 6_000_000L, "en tot ziens"),
+            ),
+        )
+
+        assertEquals(2, CaptionLayout.fromTranscript(transcript).size)
+    }
+
+    @Test
+    fun `woordtijden krijgen voorrang als ze er zijn`() {
+        val transcript = Transcript(
+            listOf(
+                TranscriptSegment(
+                    index = 0,
+                    startUs = 0L,
+                    endUs = 1_000_000L,
+                    text = "hallo daar",
+                    words = listOf(
+                        Cue.Word(0L, 400_000L, "hallo"),
+                        Cue.Word(400_000L, 1_000_000L, "daar"),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(2, CaptionLayout.fromTranscript(transcript).single().words.size)
+    }
+
+    @Test
+    fun `een leeg transcript levert niets op`() {
+        assertEquals(emptyList(), CaptionLayout.fromTranscript(Transcript()))
     }
 }

@@ -63,11 +63,17 @@ public data class TimelineGeometry(
     public fun hitTest(sequences: List<Sequence>, x: Float, y: Float): Hit? {
         if (y < rulerHeightPx) return null
 
+        // Links van de oorsprong ligt niets. `timeAt` klemt daar naar 0, wat voor
+        // scrubben klopt maar hier een treffer op de eerste clip zou opleveren
+        // terwijl de vinger buiten de tijdlijn zit — bereikbaar tijdens slepen.
+        if (x + scrollPx < 0f) return null
+
         val trackIndex = ((y - rulerHeightPx) / (trackHeightPx + trackGapPx)).toInt()
         if (trackIndex !in sequences.indices) return null
-        // In de tussenruimte tussen twee tracks zit geen clip.
+        // In de tussenruimte tussen twee tracks zit geen clip. De track beslaat
+        // [trackTop, trackTop + hoogte); die bovengrens hoort al bij het gat.
         val withinTrack = (y - trackTop(trackIndex))
-        if (withinTrack < 0f || withinTrack > trackHeightPx) return null
+        if (withinTrack < 0f || withinTrack >= trackHeightPx) return null
 
         val atUs = timeAt(x)
         val sequence = sequences[trackIndex]

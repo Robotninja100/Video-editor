@@ -84,3 +84,40 @@ class SceneDetectTest {
         assertEquals(1, SceneDetector.detect(shuffled).size)
     }
 }
+
+/**
+ * De adaptieve drempel gaat uit van cuts als minderheid. Bij een snelle montage
+ * of ver uit elkaar bemonsterde frames klopt die aanname niet, en tilde de
+ * mediaan de drempel boven de hoogst haalbare afstand uit — waarna er nul cuts
+ * uitkwamen, hoe overduidelijk ze ook waren.
+ */
+class SceneDichteMontageTest {
+
+    @Test
+    fun `afwisselende shots leveren wel cuts op`() {
+        val cuts = SceneDetector.detect(frames(1, 20, 1))
+
+        assertEquals(2, cuts.size, "beide cuts hoorden gevonden te worden: $cuts")
+    }
+
+    @Test
+    fun `materiaal waarin elk frame een ander shot is levert overal cuts op`() {
+        val cuts = SceneDetector.detect(frames(1, 8, 15, 22, 29))
+
+        assertEquals(4, cuts.size, "gevonden: $cuts")
+    }
+
+    @Test
+    fun `twee totaal verschillende frames leveren een cut op`() {
+        assertEquals(1, SceneDetector.detect(frames(1, 25)).size)
+    }
+
+    @Test
+    fun `rustig materiaal levert nog steeds niets op`() {
+        assertEquals(
+            emptyList(),
+            SceneDetector.detect(frames(5, 5, 5, 5)),
+            "de vaste ondergrens moet materiaal zonder cuts blijven beschermen",
+        )
+    }
+}

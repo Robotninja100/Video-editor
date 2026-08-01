@@ -69,7 +69,15 @@ public object SceneDetector {
         // Mediaan en niet gemiddelde: cuts zijn zelf grote uitschieters, dus een
         // gemiddelde wordt door de cuts omhooggetrokken en verbergt ze daarmee.
         // De mediaan blijft op het ruisniveau liggen zolang cuts een minderheid zijn.
-        val threshold = maxOf(config.minScore, median(scores) * config.adaptiveFactor)
+        //
+        // Maar zodra cuts géén minderheid zijn — een snelle montage, of frames die
+        // ver uit elkaar bemonsterd zijn — tilt de mediaan de drempel boven de
+        // hoogste haalbare afstand uit. De Hellinger-afstand komt nooit boven 1,
+        // dus dan vindt de detectie er nul, hoe overduidelijk de cuts ook zijn.
+        // Daarom kan de adaptieve drempel nooit boven de hoogste gemeten afstand
+        // liggen; de vaste ondergrens beschermt materiaal zonder cuts.
+        val adaptive = (median(scores) * config.adaptiveFactor).coerceAtMost(scores.max())
+        val threshold = maxOf(config.minScore, adaptive)
 
         val cuts = mutableListOf<SceneCut>()
         var lastCutUs = sorted.first().atUs
