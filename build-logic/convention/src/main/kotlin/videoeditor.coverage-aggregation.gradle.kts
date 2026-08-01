@@ -32,24 +32,17 @@ kover {
             }
         }
 
-        total {
-            // Niet aan `check` hangen: `./gradlew test` hoort snel te blijven.
-            // CI en de `controle`-opdracht vragen de rapporten expliciet.
-            xml {
-                onCheck.set(false)
-            }
-            html {
-                onCheck.set(false)
-            }
-        }
+        // De rapporten hangen bewust niet aan `check`: `./gradlew test` hoort
+        // snel te blijven. CI en de `controle`-opdracht vragen ze expliciet aan
+        // via `:koverXmlReport`, wat de standaardinstelling van Kover al is.
 
         verify {
-            onCheck.set(false)
-            // De regeldekking staat op het moment van instellen op 97%. De
-            // ondergrens ligt daar bewust ruim onder: hij moet een echte
-            // terugval betrappen, niet klagen over een enkele ongeteste regel.
-            // Vertakkingsdekking staat lager (ongeveer 66%) en is hier nog geen
-            // eis; dat is werk voor een volgende ronde.
+            // De regeldekking staat op het moment van instellen op ruim 95%
+            // (97% als je de gegenereerde serializers meetelt). De ondergrens
+            // ligt daar bewust onder: hij moet een echte terugval betrappen,
+            // niet klagen over een enkele ongeteste regel. Vertakkingsdekking
+            // staat lager (ongeveer 66%) en is hier nog geen eis; dat is werk
+            // voor een volgende ronde.
             rule("Regeldekking over alle modules") {
                 bound {
                     minValue.set(90)
