@@ -29,6 +29,7 @@ include(":core-project")
 include(":core-jobs")
 include(":core-errors")
 include(":core-thermal")
+include(":core-pipeline")
 
 // Android-modules: broncode staat in de repo, maar is nooit gecompileerd —
 // de omgeving waarin die geschreven is had geen Android SDK. Aanzetten door

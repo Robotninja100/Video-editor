@@ -9,28 +9,44 @@ Het volledige plan met architectuur, roadmap en risico's staat in
 
 ## Huidige stand
 
-Vier modules gebouwd en getest; twee geschreven maar niet gecompileerd.
+Tien modules gebouwd en getest; twee geschreven maar niet gecompileerd.
 
 | Module | Status | Inhoud |
 |---|---|---|
-| `:core-model` | ✅ gebouwd & getest | Timeline-model, bewerkingen, rendercontract, tijdlijn-geometrie, undo, persistentie |
-| `:core-analysis` | ✅ gebouwd & getest | Stiltes, scenedetectie, reframe-smoothing, EBU R128-loudness, captions, cut-list |
-| `:core-remote` | ✅ gebouwd & getest | Transcriptie, segmentatie + RLE, auto-edit — contracten en parsing |
-| `:core-design` | ✅ gebouwd & getest | Glaslagen, palet, typeschaal, contrast- en ΔE-validatie |
-| `:core-render` | 📝 geschreven, niet gebouwd | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder` |
-| `:app` | 📝 geschreven, niet gebouwd | Compose glass-componenten, tijdlijn-canvas |
+| `:core-model` | ✅ | Timeline, bewerkingen, rendercontract, tijdlijn-geometrie, undo, persistentie |
+| `:core-analysis` | ✅ | Stiltes, scenes, reframe-smoothing, EBU R128-loudness, captions, cut-list |
+| `:core-remote` | ✅ | Transcriptie, segmentatie + RLE, auto-edit — contracten en parsing |
+| `:core-design` | ✅ | Glaslagen, palet, schalen, contrast- en ΔE-validatie |
+| `:core-library` | ✅ | Mediacatalogus, sidecar-paden, verouderingslogica |
+| `:core-project` | ✅ | Projectopslag, schemamigratie, autosave, crashherstel |
+| `:core-jobs` | ✅ | Wachtrij, toestandsmachine, backoff, voortgang |
+| `:core-errors` | ✅ | Foutentaxonomie, retry-beleid, gebruikersteksten |
+| `:core-thermal` | ✅ | Thermisch beleid, hysterese, blokplanner |
+| `:core-pipeline` | ✅ | **De koppeling**: thermische rem op de wachtrij, analyseplanner, integratietests |
+| `:core-render` | 📝 niet gebouwd | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder` |
+| `:app` | 📝 niet gebouwd | Compose glass-componenten, tijdlijn-canvas |
 
-De vier `core-`modules zijn bewust pure JVM. Daardoor draaien **190 tests** zonder
+Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **692 tests** zonder
 emulator of toestel, en dat dekt precies waar stille regressies zitten:
-tijdlijnrekenwerk, DSP, coördinaatomrekening en het parsen van antwoorden van
-diensten die je niet in de hand hebt.
+tijdlijnrekenwerk, DSP, coördinaatomrekening, toestandsmachines en het parsen van
+antwoorden van diensten die je niet in de hand hebt.
+
+De modules kennen elkaar bewust niet — `:core-jobs` weet niets van temperatuur,
+`:core-thermal` niets van taken. Dat houdt ze los testbaar, maar het betekent ook
+dat de koppeling ergens moet gebeuren. Dat is `:core-pipeline`, en die bewijst met
+integratietests dat ze samen doen wat de bedoeling is.
 
 ## Bouwen
 
 ```bash
-./gradlew test          # alle unittests (190, pure JVM)
+./gradlew controle      # statische analyse, alle tests, dekkingsrapport
+./gradlew test          # alleen de unittests (692, pure JVM)
 ./gradlew :core-model:test
 ```
+
+Regeldekking is 95,1%, vertakkingsdekking 66,1%; de ondergrens staat op 90%
+regeldekking. Detekt draait met een basislijn per module in `config/detekt/`:
+bestaande overtredingen zijn bevroren, nieuwe worden tegengehouden.
 
 ### De Android-modules staan bewust uit
 

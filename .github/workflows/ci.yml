@@ -83,8 +83,12 @@ jobs:
               print('\n</details>')
           PY
 
+      # Het rapport is een hulpmiddel, geen poort. De detekt-stap hierboven
+      # bepaalt of de build slaagt; een haperende artifact-upload van GitHub
+      # hoort een groene analyse niet rood te maken.
       - name: Detekt-rapporten bewaren
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: detekt-reports
@@ -199,8 +203,11 @@ jobs:
                   print(f'| {naam} | {gedekt} | {som} | {pct:.1f}% |')
           PY
 
+      # Zie hierboven: de testresultaten staan al in de samenvatting, dus een
+      # mislukte upload mag het oordeel over de tests niet overschrijven.
       - name: Testrapport en dekking bewaren
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: test-results
