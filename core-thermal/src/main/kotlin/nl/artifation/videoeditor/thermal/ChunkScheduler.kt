@@ -102,7 +102,17 @@ public class ChunkScheduler private constructor(
 
     /** Het uitgegeven maar nog niet teruggemelde blok; hooguit één tegelijk. */
     private var outstanding: WorkChunk? = null
-    private var outstandingIssuedAtMs: Long = 0L
+
+    /**
+     * Wanneer het onderhanden blok is uitgegeven, of null als deze planner het
+     * blok niet zelf heeft uitgegeven.
+     *
+     * Na herstel uit een momentopname houdt de aanroeper vaak nog het blok van
+     * vóór de herstart vast. Zou dat als "uitgegeven op tijdstip 0" tellen, dan
+     * wordt de hele wandkloktijd sinds epoch als werktijd geboekt en meldt de
+     * schatting iets als "nog ongeveer 122 minuten".
+     */
+    private var outstandingIssuedAtMs: Long? = null
 
     private var lastDecision: ThermalDecision? = null
     private var lastDecisionAtMs: Long = 0L
@@ -128,7 +138,16 @@ public class ChunkScheduler private constructor(
     public fun next(status: ThermalStatus, nowMs: Long): ChunkPlan {
         if (isDone) return ChunkPlan.Done
 
-        outstanding?.let { return ChunkPlan.Work(it, lastDecision?.status ?: status) }
+        // Een onderhanden blok komt onveranderd terug — behalve als het toestel
+        // zichzelf uitzet. Zonder deze uitzondering was `Stopped` onbereikbaar
+        // zolang er een blok in de lucht hing, en bleef de aanroeper doorwerken
+        // terwijl het toestel uitging.
+        outstanding?.let { onderhanden ->
+            if (status < ThermalStatus.SHUTDOWN) {
+                return ChunkPlan.Work(onderhanden, lastDecision?.status ?: status)
+            }
+            outstanding = null
+        }
 
         val decision = governor.observe(status, nowMs)
         state = state.copy(thermal = governor.state)
@@ -183,7 +202,18 @@ public class ChunkScheduler private constructor(
         }
         val done = isDone
         val estimate = estimateRemainingMs(cooldownRemaining)
-        val reason = if (!done) decision?.reason else null
+        // Zonder verse meting — vlak na herstel uit een momentopname — komt de
+        // toestand uit de bewaarde thermische staat. Anders meldt de eerste
+        // `report()` na een herstart "Bezig", terwijl de eerstvolgende `next()`
+        // meteen weer pauzeert: een stilstaande balk zonder uitleg.
+        val bewaardGepauzeerd = decision == null && state.thermal.paused
+        val paused = !done && (decision?.paused == true || bewaardGepauzeerd)
+        val reason = when {
+            done -> null
+            decision != null -> decision.reason
+            bewaardGepauzeerd -> PauseReason.OVERHEATED
+            else -> null
+        }
         val percent = (progress * 100).roundToInt()
 
         return ThermalReport(
@@ -191,7 +221,7 @@ public class ChunkScheduler private constructor(
             totalUnits = state.totalUnits,
             progress = progress,
             status = decision?.status ?: state.thermal.status,
-            paused = !done && decision?.paused == true,
+            paused = paused,
             done = done,
             reason = reason,
             cooldownRemainingMs = if (done) 0L else cooldownRemaining,
@@ -219,20 +249,28 @@ public class ChunkScheduler private constructor(
         // Dat kan gebeuren na herstel uit een snapshot die verder was dan de aanroeper dacht.
         if (chunk.endExclusive <= state.completedUnits) {
             outstanding = null
+            outstandingIssuedAtMs = null
             return
         }
         require(chunk.start == state.completedUnits) {
             "blok $chunk sluit niet aan op de voortgang (${state.completedUnits}) — zo raakt werk zoek"
         }
 
-        val elapsed = max(0L, nowMs - outstandingIssuedAtMs)
+        // Alleen meten wat deze planner zelf heeft uitgegeven; zie
+        // [outstandingIssuedAtMs]. Een blok van vóór een herstart telt wel mee
+        // voor de voortgang, maar niet voor de doorvoerschatting.
+        val issuedAtMs = outstandingIssuedAtMs
+        val elapsed = if (issuedAtMs == null) 0L else max(0L, nowMs - issuedAtMs)
+        val gemeten = if (issuedAtMs == null) 0 else unitsDone
+
         state = state.copy(
             completedUnits = state.completedUnits + unitsDone,
             workedMs = state.workedMs + elapsed,
-            measuredUnits = state.measuredUnits + unitsDone,
+            measuredUnits = state.measuredUnits + gemeten,
             chunksCompleted = state.chunksCompleted + if (unitsDone == chunk.size) 1 else 0,
         )
         outstanding = null
+        outstandingIssuedAtMs = null
     }
 
     public companion object {

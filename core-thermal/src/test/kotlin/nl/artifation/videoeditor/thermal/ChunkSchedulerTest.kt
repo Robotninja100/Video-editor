@@ -4,7 +4,9 @@ import kotlin.math.max
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** Uitkomst van een gesimuleerde klus; alles synchroon, met een klok als teller. */
@@ -407,5 +409,94 @@ class HervattenTest {
         assertFailsWith<IllegalArgumentException> {
             SchedulerState(totalUnits = 100, completedUnits = 101)
         }
+    }
+}
+
+/**
+ * Drie gevallen uit een code review. Geen ervan liet een bestaande test falen;
+ * ze gaven alle drie een verkeerd antwoord zonder klacht.
+ */
+class HerstelEnAfslutenTest {
+
+    @Test
+    fun `een uitschakelend toestel breekt ook een onderhanden blok af`() {
+        val planner = ChunkScheduler(totalUnits = 5_000)
+        assertIs<ChunkPlan.Work>(planner.next(ThermalStatus.NONE, nowMs = 0L))
+
+        val plan = planner.next(ThermalStatus.SHUTDOWN, nowMs = 1_000L)
+
+        assertIs<ChunkPlan.Stopped>(
+            plan,
+            "zolang er een blok in de lucht hing was Stopped onbereikbaar; kreeg $plan",
+        )
+    }
+
+    @Test
+    fun `een onderhanden blok komt bij gewone hitte gewoon terug`() {
+        val planner = ChunkScheduler(totalUnits = 5_000)
+        val eerste = assertIs<ChunkPlan.Work>(planner.next(ThermalStatus.NONE, nowMs = 0L))
+
+        val tweede = planner.next(ThermalStatus.CRITICAL, nowMs = 1_000L)
+
+        assertEquals(
+            eerste.chunk,
+            assertIs<ChunkPlan.Work>(tweede).chunk,
+            "hetzelfde blok hoort terug te komen, anders raakt werk zoek",
+        )
+    }
+
+    /**
+     * Na een herstart houdt de aanroeper vaak nog het blok van vóór de
+     * momentopname vast. Werd dat als "uitgegeven op tijdstip 0" geteld, dan
+     * kwam de hele wandkloktijd sinds epoch als werktijd binnen.
+     */
+    @Test
+    fun `een blok van voor de herstart blaast de tijdschatting niet op`() {
+        val planner = ChunkScheduler.restore(SchedulerState(totalUnits = 5_000))
+
+        planner.complete(WorkChunk(start = 0, endExclusive = 600), nowMs = 1_000_000L)
+
+        val schatting = planner.report(nowMs = 1_000_000L).estimatedRemainingMs
+        assertTrue(
+            schatting == null || schatting < 60_000L,
+            "onzinnige schatting van ${schatting}ms na herstel",
+        )
+        assertEquals(600, planner.completedUnits, "de voortgang zelf telt wél mee")
+    }
+
+    @Test
+    fun `blokken die deze planner zelf uitgeeft worden wel gemeten`() {
+        val planner = ChunkScheduler(totalUnits = 5_000)
+        val blok = assertIs<ChunkPlan.Work>(planner.next(ThermalStatus.NONE, nowMs = 0L)).chunk
+
+        planner.complete(blok, nowMs = 2_000L)
+
+        assertNotNull(
+            planner.report(nowMs = 2_000L).estimatedRemainingMs,
+            "zonder meting kan er geen schatting zijn, maar deze is wél gemeten",
+        )
+    }
+
+    /**
+     * Een balk die stilstaat zonder uitleg leest als een vastgelopen app — precies
+     * wat deze module wilde voorkomen.
+     */
+    @Test
+    fun `een herstelde gepauzeerde planner meldt dat hij gepauzeerd is`() {
+        val heet = ChunkScheduler(totalUnits = 5_000)
+        assertIs<ChunkPlan.Pause>(heet.next(ThermalStatus.SEVERE, nowMs = 0L))
+
+        val hersteld = ChunkScheduler.restore(heet.snapshot())
+        val verslag = hersteld.report(nowMs = 1_000L)
+
+        assertTrue(verslag.paused, "verslag: ${verslag.message}")
+        assertNotNull(verslag.reason, "zonder reden staat er alleen een stilstaande balk")
+    }
+
+    @Test
+    fun `een verse planner meldt gewoon dat hij bezig is`() {
+        val verslag = ChunkScheduler(totalUnits = 5_000).report(nowMs = 0L)
+
+        assertFalse(verslag.paused, "verslag: ${verslag.message}")
     }
 }
