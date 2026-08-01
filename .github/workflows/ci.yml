@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unittests (pure JVM)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # De Android-modules staan bewust niet in settings.gradle.kts en worden
+      # hier dus niet gebouwd. Zodra ze aan staan hoort daar een tweede job bij
+      # met een Android SDK; zie docs/BOUWPLAN.md.
+      - name: Test
+        run: ./gradlew --no-daemon test
+
+      - name: Testrapport
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/build/reports/tests/test'
+          retention-days: 7

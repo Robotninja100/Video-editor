@@ -9,29 +9,48 @@ Het volledige plan met architectuur, roadmap en risico's staat in
 
 ## Huidige stand
 
-De fundering staat: de twee modules die géén Android SDK nodig hebben, met tests.
+Vier modules gebouwd en getest; twee geschreven maar niet gecompileerd.
 
 | Module | Status | Inhoud |
 |---|---|---|
-| `:core-model` | ✅ | Timeline-model, bewerkingen, validatie, JSON-persistentie, transcript-sidecar |
-| `:core-analysis` | ✅ | Stiltedetectie (RMS + hysterese), cut-list-validatie voor auto-edit |
-| `:core-render` | ⬜ | `toComposition()`, `MaskedBlurShaderProgram` — vereist Android SDK |
-| `:app` | ⬜ | Compose-UI en timeline |
-| `:core-remote` | ⬜ | Transcriptie (Groq), segmentatie (SAM 3), auto-edit (Claude) |
+| `:core-model` | ✅ gebouwd & getest | Timeline-model, bewerkingen, rendercontract, tijdlijn-geometrie, undo, persistentie |
+| `:core-analysis` | ✅ gebouwd & getest | Stiltes, scenedetectie, reframe-smoothing, EBU R128-loudness, captions, cut-list |
+| `:core-remote` | ✅ gebouwd & getest | Transcriptie, segmentatie + RLE, auto-edit — contracten en parsing |
+| `:core-design` | ✅ gebouwd & getest | Glaslagen, palet, typeschaal, contrast- en ΔE-validatie |
+| `:core-render` | 📝 geschreven, niet gebouwd | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder` |
+| `:app` | 📝 geschreven, niet gebouwd | Compose glass-componenten, tijdlijn-canvas |
 
-`:core-model` en `:core-analysis` zijn bewust pure JVM. Daardoor draaien hun tests
-zonder emulator of toestel, en dat is precies waar de stille regressies zitten:
-tijdlijnrekenwerk en DSP.
+De vier `core-`modules zijn bewust pure JVM. Daardoor draaien **190 tests** zonder
+emulator of toestel, en dat dekt precies waar stille regressies zitten:
+tijdlijnrekenwerk, DSP, coördinaatomrekening en het parsen van antwoorden van
+diensten die je niet in de hand hebt.
 
 ## Bouwen
 
 ```bash
-./gradlew test          # alle unittests (49, pure JVM)
+./gradlew test          # alle unittests (190, pure JVM)
 ./gradlew :core-model:test
 ```
 
-De Android-modules worden toegevoegd zodra de Android SDK is geconfigureerd; zie
-fase 0 in het bouwplan.
+### De Android-modules staan bewust uit
+
+`:app` en `:core-render` bestaan wel als broncode, maar staan **niet** in
+`settings.gradle.kts` en hun `build.gradle.kts` heet `.disabled`. Reden: de
+omgeving waarin ze geschreven zijn had geen Android SDK (`dl.google.com` is
+geblokkeerd op organisatiebeleid), dus die code is nooit gecompileerd. Ze in de
+build zetten zou `./gradlew test` laten falen en een valse indruk van
+"het werkt" geven.
+
+Aanzetten zodra je een omgeving met de Android SDK hebt:
+
+```bash
+mv app/build.gradle.kts.disabled app/build.gradle.kts
+mv core-render/build.gradle.kts.disabled core-render/build.gradle.kts
+# haal de commentaartekens weg bij de include()-regels in settings.gradle.kts
+```
+
+Reken erop dat er dan compilatiefouten uit komen — ongecompileerde code heeft ze
+altijd. Zie fase 0 in het bouwplan voor wat er daarna bewezen moet worden.
 
 ## Ontwerpprincipes
 

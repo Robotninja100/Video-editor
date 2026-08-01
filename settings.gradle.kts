@@ -22,6 +22,9 @@ include(":core-analysis")
 include(":core-remote")
 include(":core-design")
 
-// Android-modules worden toegevoegd zodra de Android SDK beschikbaar is:
-//   :app  :core-render  :ml-whisper  :ml-tracking
-// Zie docs/BOUWPLAN.md.
+// Android-modules: broncode staat in de repo, maar is nooit gecompileerd —
+// de omgeving waarin die geschreven is had geen Android SDK. Aanzetten door
+// hun build.gradle.kts.disabled te hernoemen en deze regels te ontkommentariëren.
+// Zie README.md en docs/BOUWPLAN.md.
+// include(":core-render")
+// include(":app")

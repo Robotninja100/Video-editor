@@ -1,0 +1,58 @@
+// Hernoem naar build.gradle.kts en zet de include() aan in settings.gradle.kts
+// zodra de Android SDK beschikbaar is. Zie docs/BOUWPLAN.md, fase 0.
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+}
+
+android {
+    namespace = "nl.artifation.videoeditor"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "nl.artifation.videoeditor"
+        minSdk = 31
+        targetSdk = 35
+        versionCode = 1
+        versionName = "0.1"
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    sourceSets["main"].java.srcDir("src/main/kotlin")
+}
+
+dependencies {
+    implementation(project(":core-model"))
+    implementation(project(":core-analysis"))
+    implementation(project(":core-remote"))
+    implementation(project(":core-design"))
+    implementation(project(":core-render"))
+
+    implementation(platform("androidx.compose:compose-bom:2026.06.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
+
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("com.google.mlkit:face-detection:16.1.7")
+
+    implementation("io.ktor:ktor-client-okhttp:3.0.3")
+    implementation("io.ktor:ktor-client-content-negotiation:3.0.3")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.3")
+}

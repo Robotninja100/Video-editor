@@ -141,7 +141,10 @@ class MaskedBlurShaderProgram(...) : BaseGlShaderProgram(false, 1) {
     }
 
     override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
-        advanceMaskTo(presentationTimeUs - clipInPointUs)  // timeline-PTS → bron-PTS
+        // Sidecars horen bij de bronclip, dus bij een getrimde clip moet de
+        // in-point erbíj. Of de effect-PTS bij 0 begint of de bron-timestamps
+        // houdt, is exact wat fase 0 moet vaststellen — het teken hangt eraan.
+        advanceMaskTo(presentationTimeUs + clipInPointUs)
         // bind inputTexId als uSource, maskTexId als uMask, teken
     }
 }
