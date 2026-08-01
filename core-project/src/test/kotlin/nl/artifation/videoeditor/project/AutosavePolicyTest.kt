@@ -12,10 +12,11 @@ class AutosavePolicyTest {
 
     @Test
     fun `zonder wijzigingen wordt er niets geschreven`() {
-        val besluit = AutosavePolicy.decide(AutosaveState(hasUnsavedChanges = false), nowMs = 10_000L)
+        val besluit =
+            AutosavePolicy.decide(AutosaveState(hasUnsavedChanges = false), nowMs = 10_000L)
 
         assertEquals(
-            AutosaveDecision.Skip(AutosaveReason.NIETS_TE_SCHRIJVEN),
+            AutosaveDecision.Skip(AutosaveReason.NOTHING_TO_SAVE),
             besluit,
             "besluit: $besluit",
         )
@@ -53,7 +54,7 @@ class AutosavePolicyTest {
         assertIs<AutosaveDecision.Wait>(tijdens, "binnen de rustpauze: $tijdens")
         assertEquals(6_500L, tijdens.untilMs, "wachten tot: ${tijdens.untilMs}")
         assertEquals(
-            AutosaveDecision.Write(AutosaveReason.RUSTPAUZE),
+            AutosaveDecision.Write(AutosaveReason.QUIET_PERIOD),
             erna,
             "na de rustpauze: $erna",
         )
@@ -110,13 +111,14 @@ class AutosavePolicyTest {
             state = AutosavePolicy.onEdit(state, EditKind.CONTINUOUS, nowMs)
             val besluit = AutosavePolicy.decide(state, nowMs, config)
             if (besluit is AutosaveDecision.Write) {
-                assertEquals(AutosaveReason.BOVENGRENS, besluit.reason, "besluit: $besluit")
+                assertEquals(AutosaveReason.MAX_INTERVAL, besluit.reason, "besluit: $besluit")
                 eersteSchrijfactieOpMs = nowMs
             }
         }
 
         assertTrue(
-            eersteSchrijfactieOpMs != null && eersteSchrijfactieOpMs!! <= config.maxIntervalMs + 16L,
+            eersteSchrijfactieOpMs != null &&
+                eersteSchrijfactieOpMs!! <= config.maxIntervalMs + 16L,
             "er werd pas geschreven op $eersteSchrijfactieOpMs ms",
         )
     }
@@ -133,7 +135,7 @@ class AutosavePolicyTest {
         val besluit = AutosavePolicy.decide(state, nowMs = 10_400L, config = config)
 
         assertEquals(
-            AutosaveDecision.Wait(11_000L, AutosaveReason.ONDERGRENS),
+            AutosaveDecision.Wait(11_000L, AutosaveReason.MIN_INTERVAL),
             besluit,
             "besluit: $besluit",
         )
@@ -152,7 +154,7 @@ class AutosavePolicyTest {
         val besluit = AutosavePolicy.decide(state, nowMs = 9_000L, config = config)
 
         assertEquals(
-            AutosaveDecision.Wait(9_000L + config.retryDelayMs, AutosaveReason.SCHRIJFACTIE_BEZIG),
+            AutosaveDecision.Wait(9_000L + config.retryDelayMs, AutosaveReason.WRITE_IN_PROGRESS),
             besluit,
             "besluit: $besluit",
         )
@@ -165,7 +167,7 @@ class AutosavePolicyTest {
         val besluit = AutosavePolicy.decide(state, nowMs = 40_300L, config = config)
 
         assertEquals(
-            AutosaveDecision.Write(AutosaveReason.RUSTPAUZE),
+            AutosaveDecision.Write(AutosaveReason.QUIET_PERIOD),
             besluit,
             "besluit: $besluit; de ondergrens hoort niet te gelden zonder eerdere schrijfactie",
         )
@@ -177,7 +179,11 @@ class AutosavePolicyTest {
 
         val besluit = AutosavePolicy.decide(state, nowMs = 100L + config.maxIntervalMs, config)
 
-        assertEquals(AutosaveDecision.Write(AutosaveReason.BOVENGRENS), besluit, "besluit: $besluit")
+        assertEquals(
+            AutosaveDecision.Write(AutosaveReason.MAX_INTERVAL),
+            besluit,
+            "besluit: $besluit",
+        )
     }
 
     @Test
@@ -232,7 +238,7 @@ class AutosavePolicyTest {
         state = AutosavePolicy.onWritten(state, startedAtMs = 500L, finishedAtMs = 520L)
 
         assertEquals(
-            AutosaveDecision.Skip(AutosaveReason.NIETS_TE_SCHRIJVEN),
+            AutosaveDecision.Skip(AutosaveReason.NOTHING_TO_SAVE),
             AutosavePolicy.decide(state, nowMs = 5_000L, config = config),
             "state: $state",
         )

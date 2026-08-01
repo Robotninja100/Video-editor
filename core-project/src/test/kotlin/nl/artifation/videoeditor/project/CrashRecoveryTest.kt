@@ -58,7 +58,7 @@ class CrashRecoveryTest {
 
         assertIs<RecoveryPlan.DiscardAutosave>(plan, "plan: $plan")
         assertEquals(
-            RecoveryPlan.DiscardReason.AUTOSAVE_NIET_NIEUWER,
+            RecoveryPlan.DiscardReason.AUTOSAVE_NOT_NEWER,
             plan.reason,
             "plan: $plan",
         )
@@ -84,7 +84,7 @@ class CrashRecoveryTest {
 
         assertIs<RecoveryPlan.DiscardAutosave>(plan, "plan: $plan")
         assertEquals(
-            RecoveryPlan.DiscardReason.AUTOSAVE_ONLEESBAAR,
+            RecoveryPlan.DiscardReason.AUTOSAVE_UNREADABLE,
             plan.reason,
             "plan: $plan",
         )

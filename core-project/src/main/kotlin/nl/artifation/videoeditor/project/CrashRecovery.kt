@@ -38,10 +38,10 @@ public sealed interface RecoveryPlan {
 
     public enum class DiscardReason {
         /** Half weggeschreven of anderszins stuk — precies waar de MAIN-kopie voor is. */
-        AUTOSAVE_ONLEESBAAR,
+        AUTOSAVE_UNREADABLE,
 
         /** De autosave is niet nieuwer dan het opgeslagen bestand. */
-        AUTOSAVE_NIET_NIEUWER,
+        AUTOSAVE_NOT_NEWER,
     }
 }
 
@@ -73,7 +73,7 @@ public object CrashRecovery {
                 saved != null && autosaveText == null -> RecoveryPlan.OpenSaved(saved)
                 saved != null -> RecoveryPlan.DiscardAutosave(
                     saved,
-                    RecoveryPlan.DiscardReason.AUTOSAVE_ONLEESBAAR,
+                    RecoveryPlan.DiscardReason.AUTOSAVE_UNREADABLE,
                 )
 
                 else -> RecoveryPlan.Unrecoverable(id, "geen enkel leesbaar bestand")
@@ -90,7 +90,7 @@ public object CrashRecovery {
 
             else -> RecoveryPlan.DiscardAutosave(
                 saved,
-                RecoveryPlan.DiscardReason.AUTOSAVE_NIET_NIEUWER,
+                RecoveryPlan.DiscardReason.AUTOSAVE_NOT_NEWER,
             )
         }
     }

@@ -40,7 +40,9 @@ public data class AutosaveConfig(
 ) {
     init {
         require(quietPeriodMs >= 0) { "quietPeriodMs moet >= 0 zijn, was $quietPeriodMs" }
-        require(structuralDelayMs >= 0) { "structuralDelayMs moet >= 0 zijn, was $structuralDelayMs" }
+        require(structuralDelayMs >= 0) {
+            "structuralDelayMs moet >= 0 zijn, was $structuralDelayMs"
+        }
         require(minIntervalMs >= 0) { "minIntervalMs moet >= 0 zijn, was $minIntervalMs" }
         require(retryDelayMs > 0) { "retryDelayMs moet positief zijn, was $retryDelayMs" }
         require(maxIntervalMs >= quietPeriodMs) {
@@ -72,19 +74,19 @@ public data class AutosaveState(
 )
 
 public enum class AutosaveReason {
-    NIETS_TE_SCHRIJVEN,
+    NOTHING_TO_SAVE,
 
     /** De gebruiker is even gestopt met bewerken. */
-    RUSTPAUZE,
+    QUIET_PERIOD,
 
     /** De bovengrens is bereikt; er wordt midden in het bewerken geschreven. */
-    BOVENGRENS,
+    MAX_INTERVAL,
 
     /** Er is net geschreven; nog even niet opnieuw. */
-    ONDERGRENS,
+    MIN_INTERVAL,
 
     /** Er loopt al een schrijfactie. */
-    SCHRIJFACTIE_BEZIG,
+    WRITE_IN_PROGRESS,
 }
 
 public sealed interface AutosaveDecision {
@@ -118,11 +120,11 @@ public object AutosavePolicy {
         nowMs: Long,
         config: AutosaveConfig = AutosaveConfig(),
     ): AutosaveDecision {
-        if (!state.hasUnsavedChanges) return AutosaveDecision.Skip(AutosaveReason.NIETS_TE_SCHRIJVEN)
+        if (!state.hasUnsavedChanges) return AutosaveDecision.Skip(AutosaveReason.NOTHING_TO_SAVE)
         if (state.writeInProgress) {
             return AutosaveDecision.Wait(
                 nowMs + config.retryDelayMs,
-                AutosaveReason.SCHRIJFACTIE_BEZIG,
+                AutosaveReason.WRITE_IN_PROGRESS,
             )
         }
 
@@ -138,18 +140,21 @@ public object AutosavePolicy {
         val targetMs = if (earliestMs != null) maxOf(wantedMs, earliestMs) else wantedMs
 
         if (nowMs >= targetMs) {
-            val reason =
-                if (nowMs >= hardDeadlineMs) AutosaveReason.BOVENGRENS else AutosaveReason.RUSTPAUZE
+            val reason = if (nowMs >= hardDeadlineMs) {
+                AutosaveReason.MAX_INTERVAL
+            } else {
+                AutosaveReason.QUIET_PERIOD
+            }
             return AutosaveDecision.Write(reason)
         }
         val reason = when {
             earliestMs != null && targetMs == earliestMs && earliestMs > wantedMs ->
-                AutosaveReason.ONDERGRENS
+                AutosaveReason.MIN_INTERVAL
 
             targetMs == hardDeadlineMs && hardDeadlineMs < quietDeadlineMs ->
-                AutosaveReason.BOVENGRENS
+                AutosaveReason.MAX_INTERVAL
 
-            else -> AutosaveReason.RUSTPAUZE
+            else -> AutosaveReason.QUIET_PERIOD
         }
         return AutosaveDecision.Wait(targetMs, reason)
     }
@@ -165,7 +170,11 @@ public object AutosavePolicy {
      * [startedAtMs]) blijven onopgeslagen staan — anders raakt precies de
      * bewerking kwijt die net te laat was.
      */
-    public fun onWritten(state: AutosaveState, startedAtMs: Long, finishedAtMs: Long): AutosaveState =
+    public fun onWritten(
+        state: AutosaveState,
+        startedAtMs: Long,
+        finishedAtMs: Long,
+    ): AutosaveState =
         state.copy(
             hasUnsavedChanges = state.lastEditAtMs > startedAtMs,
             lastWriteAtMs = finishedAtMs,

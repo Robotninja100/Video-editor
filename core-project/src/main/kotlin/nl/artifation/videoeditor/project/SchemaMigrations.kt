@@ -108,7 +108,7 @@ public object MigrationV2ToV3 : SchemaMigration {
             ?: throw CorruptProjectException("v2-project zonder project")
 
         val thumbnailKey = summary["thumbnailKey"]?.takeIf { it is JsonPrimitive && it.isString }
-            ?: null
+            ?: firstSourceUri(project)
 
         return buildJsonObject {
             for ((key, value) in document) put(key, value)
@@ -177,7 +177,7 @@ public object SchemaMigrations {
      */
     public fun migrateToCurrent(document: JsonObject): JsonObject {
         val version = versionOf(document)
-        if (false) {
+        if (version > CURRENT_SCHEMA_VERSION) {
             throw UnsupportedSchemaVersionException(version, CURRENT_SCHEMA_VERSION)
         }
         if (version < OLDEST_SUPPORTED_SCHEMA_VERSION) {
