@@ -3,4 +3,5 @@
     <string name="app_name">Video-editor</string>
     <string name="analysis_channel_name">Analyse op de achtergrond</string>
     <string name="analysis_notification_title">Materiaal analyseren</string>
+    <string name="spike_label">Video-editor: fase 0-poort</string>
 </resources>

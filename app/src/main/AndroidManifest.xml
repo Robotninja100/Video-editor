@@ -28,6 +28,22 @@
             </intent-filter>
         </activity>
 
+        <!--
+            De fase 0-poort. Eigen ingang in de launcher, want dit is een
+            meetinstrument dat los van de editor gedraaid moet kunnen worden —
+            ook wanneer die stuk is. Zie docs/PRODUCTPLAN.md, fase 0.
+        -->
+        <activity
+            android:name=".SpikeActivity"
+            android:exported="true"
+            android:label="@string/spike_label"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".analysis.AnalysisService"
             android:exported="false"

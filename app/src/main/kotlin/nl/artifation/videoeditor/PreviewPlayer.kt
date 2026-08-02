@@ -10,8 +10,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.CompositionPlayer
 import nl.artifation.videoeditor.model.Project
-import nl.artifation.videoeditor.model.toCompositionPlan
-import nl.artifation.videoeditor.render.CompositionMapper
+import nl.artifation.videoeditor.model.toRenderPlan
+import nl.artifation.videoeditor.render.toComposition
 
 /**
  * De preview-speler voor het project op het scherm.
@@ -21,17 +21,16 @@ import nl.artifation.videoeditor.render.CompositionMapper
  * bewerking zou de decoders per knip opnieuw laten opstarten en het monteren
  * onbruikbaar traag maken.
  *
- * De vertaling van project naar `Composition` gebeurt in [CompositionMapper] en
- * nergens anders — zie het ontwerpprincipe in de README.
+ * De vertaling van project naar `Composition` gebeurt via `toRenderPlan()` en
+ * `toComposition()` en nergens anders — zie het ontwerpprincipe in de README.
  *
- * **Niet gecompileerd of gedraaid.** `CompositionPlayer` is `@ExperimentalApi`;
+ * **Nooit op een toestel gedraaid.** `CompositionPlayer` is `@ExperimentalApi`;
  * dat dit werkt, is precies wat fase 0 op het toestel moet uitwijzen.
  */
 @UnstableApi
 @Composable
 public fun rememberPreviewPlayer(project: Project): Player? {
     val context: Context = LocalContext.current
-    val mapper = remember { CompositionMapper() }
 
     val player = remember { CompositionPlayer.Builder(context).build() }
 
@@ -51,7 +50,7 @@ public fun rememberPreviewPlayer(project: Project): Player? {
 
     LaunchedEffect(project, hasContent) {
         if (hasContent) {
-            player.setComposition(mapper.map(project.toCompositionPlan()))
+            player.setComposition(project.toRenderPlan().toComposition(context))
             player.prepare()
         }
     }

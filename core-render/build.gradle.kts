@@ -26,7 +26,15 @@ android {
         jvmTarget = "17"
     }
 
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
+
     sourceSets["main"].java.srcDir("src/main/kotlin")
+    sourceSets["test"].java.srcDir("src/test/kotlin")
 }
 
 dependencies {
@@ -35,14 +43,23 @@ dependencies {
     // Gepind: CompositionPlayer is @ExperimentalApi en breekt tussen versies.
     // Herbeoordeel bewust, niet als bijvangst van een upgrade.
     //
-    // `api` en niet `implementation` voor transformer en common: CompositionMapper
+    // `api` en niet `implementation` voor transformer en common: toComposition()
     // geeft een `Composition` terug, dus dat type staat in de publieke API van
     // deze module. Met `implementation` staat het niet op het compileerpad van
-    // :app en is de mapper daar niet aan te roepen.
+    // :app en is de vertaling daar niet aan te roepen.
     api("androidx.media3:media3-transformer:1.10.1")
     api("androidx.media3:media3-common:1.10.1")
 
     // Alleen intern gebruikt, door MaskedBlurShaderProgram.
     implementation("androidx.media3:media3-effect:1.10.1")
     implementation("androidx.media3:media3-exoplayer:1.10.1")
+
+    // Robolectric, zodat de vertaling naar Media3 zonder toestel te toetsen is.
+    // Dat dekt niet de GPU-kant — die blijft aan fase 0 hangen — maar wel de
+    // gaten, trims, snelheden en effectvolgorde, en dat is waar de stille fouten
+    // zitten. Zonder deze drie was `:core-render` de enige module zonder tests.
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation("junit:junit:4.13.2")
 }
