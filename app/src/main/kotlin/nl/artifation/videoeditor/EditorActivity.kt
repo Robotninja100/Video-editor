@@ -71,7 +71,9 @@ public class EditorActivity : ComponentActivity() {
 @Composable
 private fun GekozenVideo(onGekozen: (Uri, Us) -> Unit) {
     val context = LocalContext.current
-    var gekozen: Uri? by remember { mutableStateOf(null) }
+    // Het typeargument moet erbij: `mutableStateOf(null)` levert een
+    // `MutableState<Nothing?>` op, en daar valt de gekozen uri niet in te zetten.
+    var gekozen by remember { mutableStateOf<Uri?>(null) }
     var gevraagd by remember { mutableStateOf(false) }
 
     val kiezer = rememberLauncherForActivityResult(
@@ -102,7 +104,7 @@ private fun durationUsOf(context: Context, uri: Uri): Us {
             ?.toLongOrNull()
             ?: 0L
         ms * US_PER_MS
-    } catch (e: RuntimeException) {
+    } catch (ignored: RuntimeException) {
         // setDataSource gooit bij een uri die de provider niet meer geeft, en bij
         // een bestand dat geen media is. Beide zijn "geen bruikbare video",
         // niet iets om de app op te laten vallen.

@@ -35,7 +35,7 @@ public class EditorViewModel(
     public var playheadUs: Us by mutableStateOf(0L)
         private set
 
-    public var selectedClipId: String? by mutableStateOf(null)
+    public var selectedClipId: String? by mutableStateOf<String?>(null)
         private set
 
     public var pxPerSecond: Float by mutableStateOf(STANDAARD_ZOOM)
