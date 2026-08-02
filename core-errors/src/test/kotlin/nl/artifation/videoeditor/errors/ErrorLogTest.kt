@@ -2,6 +2,7 @@ package nl.artifation.videoeditor.errors
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ErrorLogTest {
@@ -143,5 +144,66 @@ class RedactTest {
         val melding = "kon fragment 3 niet lezen op 12,5 seconde"
 
         assertEquals(melding, ErrorLog.redact(melding))
+    }
+}
+
+/**
+ * De doc van [ErrorLog] belooft twee dingen: geen sleutels en geen volledige
+ * paden. De bestaande dekkingstest loopt over [ALL_ERRORS], en geen enkele
+ * `detail` daarin bevat een pad — daarom staat dit hier apart, met de tekst
+ * zoals de JVM hem daadwerkelijk oplevert.
+ */
+class LogLeaksNothingTest {
+
+    private val diepPad = "/storage/emulated/0/DCIM/Camera/klant-acme/vakantie.mp4"
+
+    @Test
+    fun `het detail van een bestandsfout draagt geen mapnamen`() {
+        val error = ErrorMapper.fromThrowable(
+            java.io.IOException("$diepPad: open failed: EACCES (Permission denied)"),
+            path = diepPad,
+        )
+
+        val regel = ErrorLog.line(error!!)
+        assertFalse("klant-acme" in regel, "mapnaam in het log: $regel")
+        assertFalse(diepPad in regel, "volledig pad in het log: $regel")
+        assertTrue("vakantie.mp4" in regel, "de bestandsnaam mag juist wel: $regel")
+    }
+
+    @Test
+    fun `een stacktrace draagt hem evenmin`() {
+        val error = ErrorMapper.fromThrowable(
+            java.nio.file.AccessDeniedException(diepPad),
+            path = diepPad,
+        )
+
+        val melding = EditorException(error!!).message.orEmpty()
+        assertFalse("klant-acme" in melding, "mapnaam in de exceptie: $melding")
+    }
+
+    @Test
+    fun `een sleutel met een underscore ervoor wordt ook weggestreept`() {
+        val geredigeerd = ErrorLog.redact("""{"anthropic_api_key":"kaas1234567890"}""")
+
+        assertFalse("kaas1234567890" in geredigeerd, "sleutel bleef staan: $geredigeerd")
+    }
+
+    @Test
+    fun `de handtekening van een presigned url overleeft niet`() {
+        val url = "https://bucket.s3.amazonaws.com/a.mp4" +
+            "?X-Amz-Credential=AKIAIOSFODNN7EXAMPLE&X-Amz-Signature=b2c3d4e5f60718293a4b5c6d7e8f90a1"
+
+        val geredigeerd = ErrorLog.redact(url)
+
+        assertFalse("b2c3d4e5f60718293a4b5c6d7e8f90a1" in geredigeerd, "handtekening bleef staan: $geredigeerd")
+        assertFalse("AKIAIOSFODNN7EXAMPLE" in geredigeerd, "sleutel-id bleef staan: $geredigeerd")
+    }
+
+    @Test
+    fun `redigeren blijft idempotent`() {
+        val ruw = """{"anthropic_api_key":"kaas1234567890"} en ?X-Amz-Signature=abcdef1234567890"""
+        val een = ErrorLog.redact(ruw)
+
+        assertEquals(een, ErrorLog.redact(een))
     }
 }

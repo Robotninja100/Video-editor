@@ -2,6 +2,7 @@ package nl.artifation.videoeditor.errors
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -201,5 +202,26 @@ class EditorErrorCoverageTest {
 
         assertEquals(codes.size, codes.toSet().size, "dubbele codes in $codes")
         assertTrue(codes.all { it.isNotBlank() }, "lege code in $codes")
+    }
+}
+
+class WaitPhrasingTest {
+
+    @Test
+    fun `dertig seconden wachten is geen minuut`() {
+        val error = ErrorMapper.fromHttpStatus(429, RemoteService.TRANSCRIPTION, retryAfterSeconds = 30L)
+
+        val melding = error!!.userMessage
+        assertTrue("30 seconden" in melding, melding)
+        assertFalse("minuten" in melding, melding)
+    }
+
+    @Test
+    fun `nooit 1 minuten`() {
+        for (seconden in listOf(1L, 5L, 30L, 59L, 60L, 90L)) {
+            val error = ErrorMapper.fromHttpStatus(429, RemoteService.TRANSCRIPTION, retryAfterSeconds = seconden)
+
+            assertFalse("1 minuten" in error!!.userMessage, "bij $seconden s: ${error.userMessage}")
+        }
     }
 }

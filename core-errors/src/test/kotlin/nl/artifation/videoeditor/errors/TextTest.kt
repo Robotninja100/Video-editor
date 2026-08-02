@@ -2,6 +2,7 @@ package nl.artifation.videoeditor.errors
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class FormatBytesTest {
 
@@ -65,5 +66,72 @@ class MinutesTest {
     fun `wacht nooit nul minuten`() {
         assertEquals(1L, minutesRoundedUp(0L), "\"wacht 0 minuten\" is geen advies")
         assertEquals(1L, minutesRoundedUp(1L))
+    }
+}
+
+class HumanWaitTest {
+
+    @Test
+    fun `onder een minuut telt het in seconden`() {
+        assertEquals("30 seconden", humanWait(30_000L))
+        assertEquals("45 seconden", humanWait(45_000L))
+        assertEquals("59 seconden", humanWait(59_000L))
+    }
+
+    @Test
+    fun `een minuut is enkelvoud`() {
+        assertEquals("1 minuut", humanWait(60_000L))
+        assertEquals("1 seconde", humanWait(1L), "en een seconde ook")
+    }
+
+    @Test
+    fun `daarboven hele minuten naar boven afgerond`() {
+        assertEquals("2 minuten", humanWait(90_000L))
+        assertEquals("5 minuten", humanWait(300_000L))
+    }
+}
+
+class ShortenPathsTest {
+
+    @Test
+    fun `een absoluut pad blijft alleen als bestandsnaam over`() {
+        val melding = "/storage/emulated/0/DCIM/Camera/klant-acme/vakantie.mp4: open failed: EACCES"
+
+        assertEquals("vakantie.mp4: open failed: EACCES", shortenPaths(melding))
+    }
+
+    @Test
+    fun `een content-uri houdt zijn soort maar niet zijn mappen`() {
+        val kort = shortenPaths("kon content://com.android.providers.media.documents/document/video%3A42 niet openen")
+
+        assertEquals("kon content://…/video%3A42 niet openen", kort)
+    }
+
+    @Test
+    fun `een gecodeerde padscheiding verbergt de mapnaam niet`() {
+        val kort = shortenPaths("file:///storage/emulated/0/Documents%2Fklant-acme%2Fgeheim.mp4")
+
+        assertFalse("klant-acme" in kort, "de mapnaam lekt alsnog: $kort")
+    }
+
+    @Test
+    fun `een https-adres houdt zijn host`() {
+        val melding = "POST https://api.groq.com/openai/v1/audio/transcriptions gaf 503"
+
+        assertEquals(melding, shortenPaths(melding), "het pad van een endpoint is juist de nuttige informatie")
+    }
+
+    @Test
+    fun `een melding zonder pad blijft ongemoeid`() {
+        val melding = "write failed: ENOSPC (No space left on device)"
+
+        assertEquals(melding, shortenPaths(melding))
+    }
+
+    @Test
+    fun `nog een keer inkorten verandert niets meer`() {
+        val een = shortenPaths("/storage/emulated/0/DCIM/vakantie.mp4 kan niet gelezen worden")
+
+        assertEquals(een, shortenPaths(een))
     }
 }

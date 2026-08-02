@@ -28,14 +28,25 @@ public object ErrorLog {
         // De vooruitblik laat "Authorization: Bearer ..." aan het patroon hierboven
         // over; anders verdwijnt daar het woord "Bearer" en zie je niet meer wat
         // voor soort toegang het was.
+        // De grens is bewust `(?<![A-Za-z0-9])` en geen `\b`: een underscore is
+        // een woordteken, dus `\banthropic_api_key` had geen grens vóór `api` en
+        // `anthropic_api_key=...` kwam er onaangeroerd uit — precies de vorm die
+        // omgevingsvariabelen en JSON-sleutels aannemen.
         Regex(
-            """(?i)\b(api[-_]?key|apikey|access[-_]?token|token|secret|password|wachtwoord|authorization)\b""" +
+            """(?i)(?<![A-Za-z0-9])(api[-_]?key|apikey|access[-_]?token|token|secret|""" +
+                """password|wachtwoord|authorization)(?![A-Za-z0-9])""" +
                 """(["']?\s*[:=]\s*["']?)(?!bearer\b|basic\b)([^\s,;"'&}]+)""",
         ) to "$1$2$MASK",
         // Sleutels met een herkenbaar voorvoegsel, ook als ze los in een tekst staan.
         Regex("""\b(sk|gsk|xoxb|ghp|pk)[-_][A-Za-z0-9_\-]{8,}""") to MASK,
-        // ...?key=...&sig=...
-        Regex("""(?i)([?&](?:key|token|api_key|apikey|sig|signature)=)[^&\s]+""") to "$1$MASK",
+        // ...?key=...&X-Amz-Signature=...
+        //
+        // De parameternaam mag een voor- en achtervoegsel hebben. Zonder dat
+        // bleef een presigned URL heel — en zo bied je nu juist audio aan Whisper
+        // en video aan de segmentatiedienst aan.
+        Regex(
+            """(?i)([?&][\w.\-]*(?:key|token|secret|sig|signature|credential)[\w.\-]*=)[^&\s]+""",
+        ) to "$1$MASK",
     )
 
     /** Haalt alles weg wat op een sleutel lijkt. Idempotent. */
@@ -113,7 +124,7 @@ public object ErrorLog {
 
     /** Geschoond, ingekort en zonder regeleindes — anders is het geen regel meer. */
     private fun detail(raw: String): String {
-        val cleaned = redact(raw).replace(Regex("""\s+"""), " ").trim()
+        val cleaned = shortenPaths(redact(raw)).replace(Regex("""\s+"""), " ").trim()
         return if (cleaned.length <= MAX_DETAIL_LENGTH) cleaned else cleaned.take(MAX_DETAIL_LENGTH) + "..."
     }
 }

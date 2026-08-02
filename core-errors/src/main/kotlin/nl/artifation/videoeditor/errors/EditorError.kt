@@ -311,7 +311,7 @@ public sealed interface EditorError {
         override val retryable: Boolean get() = true
         override val userMessage: String
             get() {
-                val wachttijd = retryAfterMs?.let { "ongeveer ${minutesRoundedUp(it)} minuten" } ?: "een paar minuten"
+                val wachttijd = retryAfterMs?.let { "ongeveer ${humanWait(it)}" } ?: "een paar minuten"
                 return "Je gebruikt ${service.label} even te vaak achter elkaar. " +
                     "Wacht $wachttijd en probeer het opnieuw."
             }
@@ -362,7 +362,19 @@ public sealed interface EditorError {
     /** Het toestel is te warm om door te werken. */
     @Serializable
     @SerialName("overheated")
-    public data class Overheated(val measuredCelsius: Int? = null) : EditorError {
+    public data class Overheated(
+        val measuredCelsius: Int? = null,
+        /**
+         * Hoe lang het toestel met rust gelaten moet worden.
+         *
+         * Draagt een waarde omdat de fout anders in de exponentiële backoff
+         * valt en de wachtrij binnen drie seconden vier keer terugkomt op een
+         * toestel dat minuten nodig heeft — en het daarna permanent opgeeft.
+         * Wie de temperatuur echt meet ([nl.artifation.videoeditor.errors] weet
+         * dat niet) geeft hier zijn eigen schatting mee.
+         */
+        val cooldownMs: Long = DEFAULT_COOLDOWN_MS,
+    ) : EditorError {
         override val code: String get() = "overheated"
 
         /** Warmte zakt vanzelf; dit is juist het geval waarvoor uitgesteld opnieuw proberen bestaat. */
@@ -371,6 +383,11 @@ public sealed interface EditorError {
         override val userMessage: String
             get() = "Je toestel is te warm geworden om door te werken. " +
                 "Leg het even weg en ga over een paar minuten verder."
+
+        public companion object {
+            /** Een minuut is de ondergrens waarop een warm toestel merkbaar zakt. */
+            public const val DEFAULT_COOLDOWN_MS: Long = 60_000L
+        }
     }
 
     /**
@@ -438,6 +455,7 @@ public fun EditorError.rootCause(): EditorError =
 public fun EditorError.retryAfterMs(): Long? = when (this) {
     is EditorError.RateLimited -> retryAfterMs
     is EditorError.ServiceFailure -> retryAfterMs
+    is EditorError.Overheated -> cooldownMs
     is EditorError.StageFailure -> cause.retryAfterMs()
     is EditorError.Multiple -> errors.mapNotNull { it.retryAfterMs() }.maxOrNull()
     else -> null

@@ -1,5 +1,6 @@
 package nl.artifation.videoeditor.errors
 
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToLong
@@ -84,7 +85,17 @@ public data class RetryPolicy(
         // Een dienst die zelf zegt hoe lang we weg moeten blijven, weet dat beter
         // dan onze formule. Die wachttijd mag daarom over de bovengrens heen.
         val demanded = error.retryAfterMs() ?: return jittered
-        return maxOf(jittered, demanded)
+
+        // Ook die wachttijd krijgt spreiding, en dat is juist hier het punt: een
+        // opgegeven wachttijd komt van een dienst die tegen de hele wachtrij
+        // tegelijk "kom over zestig seconden terug" zegt. Zonder spreiding komen
+        // ze allemaal op dezelfde seconde terug en gaat hij voor de tweede keer om.
+        //
+        // De spreiding gaat alleen omhoog — korter wachten dan gevraagd is geen
+        // optie — en volgt `abs(factor - 1)`, zodat `Jitter.NONE` (factor precies
+        // 1) de opgegeven wachttijd onveranderd laat.
+        val spread = (demanded * abs(factor - 1.0)).roundToLong()
+        return maxOf(jittered, demanded + spread)
     }
 
     /**

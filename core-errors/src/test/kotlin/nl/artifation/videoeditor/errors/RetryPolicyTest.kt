@@ -189,3 +189,66 @@ class RetryAfterPolicyTest {
         assertEquals(45_000L, STRAK.delayMsFor(error, attemptsSoFar = 2))
     }
 }
+
+/**
+ * De opgegeven wachttijd van een dienst is het énige geval waarin de hele
+ * wachtrij precies dezelfde waarde krijgt. Juist daar moet spreiding overblijven.
+ */
+class RetryAfterJitterTest {
+
+    private val beleid = RetryPolicy(maxAttempts = 4, jitterRatio = 0.25)
+    private val teVaak = EditorError.RateLimited(RemoteService.TRANSCRIPTION, retryAfterMs = 60_000L)
+
+    @Test
+    fun `twintig taken met dezelfde 429 komen niet op hetzelfde moment terug`() {
+        val jitter = Jitter.of(Random(7))
+        val wachttijden = List(200) { beleid.delayMsFor(teVaak, attemptsSoFar = 1, jitter = jitter)!! }
+
+        assertTrue(
+            wachttijden.toSet().size > 50,
+            "te weinig spreiding: ${wachttijden.toSet().size} verschillende waarden",
+        )
+    }
+
+    @Test
+    fun `de spreiding gaat alleen omhoog`() {
+        val jitter = Jitter.of(Random(7))
+        val wachttijden = List(200) { beleid.delayMsFor(teVaak, attemptsSoFar = 1, jitter = jitter)!! }
+
+        assertTrue(
+            wachttijden.all { it >= 60_000L },
+            "korter wachten dan gevraagd: ${wachttijden.filter { it < 60_000L }}",
+        )
+        assertTrue(
+            wachttijden.all { it <= 75_000L },
+            "meer dan een kwart erbij: ${wachttijden.filter { it > 75_000L }}",
+        )
+    }
+
+    @Test
+    fun `zonder jitter komt de opgegeven wachttijd er onveranderd uit`() {
+        assertEquals(60_000L, beleid.delayMsFor(teVaak, attemptsSoFar = 1, jitter = Jitter.NONE))
+    }
+}
+
+class OverheatedBackoffTest {
+
+    @Test
+    fun `een warm toestel krijgt minuten, geen milliseconden`() {
+        val warm = EditorError.Overheated(measuredCelsius = 46)
+
+        val wachttijden = RetryPolicy().schedule(warm, Jitter.NONE)
+
+        assertTrue(
+            wachttijden.all { it >= EditorError.Overheated.DEFAULT_COOLDOWN_MS },
+            "de wachtrij komt binnen de afkoeltijd terug: $wachttijden",
+        )
+    }
+
+    @Test
+    fun `wie de temperatuur echt meet mag zijn eigen afkoeltijd meegeven`() {
+        val warm = EditorError.Overheated(measuredCelsius = 52, cooldownMs = 180_000L)
+
+        assertEquals(180_000L, RetryPolicy().delayMsFor(warm, attemptsSoFar = 1, jitter = Jitter.NONE))
+    }
+}

@@ -174,6 +174,16 @@ public object ErrorMapper {
     private fun pathFromMessage(throwable: Throwable): String =
         throwable.message?.substringBefore(" (")?.trim().orEmpty()
 
+    /**
+     * Het pad gaat er hier al af, niet pas bij het loggen.
+     *
+     * `detail` is een ontwikkelaarstekst die ook op een scherm terecht kan komen,
+     * en de melding van de JVM begint bij een bestandsfout met het volledige pad.
+     * Het echte pad zit al in `EditorError.path`; daar hoort het, en daar wordt
+     * het bij het loggen ingekort.
+     */
     private fun detailOf(throwable: Throwable): String? =
-        throwable.message?.let { ErrorLog.redact(it).take(MAX_DETAIL_LENGTH) }?.ifBlank { null }
+        throwable.message
+            ?.let { shortenPaths(ErrorLog.redact(it)).take(MAX_DETAIL_LENGTH) }
+            ?.ifBlank { null }
 }
