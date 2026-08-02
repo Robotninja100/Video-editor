@@ -72,12 +72,30 @@ public data class MediaCatalog(
     public fun byUri(uri: String): MediaAsset? = uriIndex[uri]?.let(byId::get)
 
     /**
+     * Alle uri's waaronder een asset bekend is: zijn eigen uri plus de aliassen.
+     *
+     * Nodig zodra je wilt weten of een bestand nog te bereiken is. Android geeft
+     * per keuze een nieuwe `content://`-uri — dat is precies waarom de aliassen
+     * bestaan — dus alleen [MediaAsset.uri] toetsen zegt niets als die uri de
+     * verlopen eerste is.
+     */
+    public fun urisOf(id: String): Set<String> = buildSet {
+        byId[id]?.let { add(it.uri) }
+        aliases.forEach { (uri, target) -> if (target == id) add(uri) }
+    }
+
+    /**
      * Voegt toe, of houdt het bestaande asset als de inhoud al bekend is. In dat
      * tweede geval blijft [MediaAsset.addedAtEpochMs] van de eerste import staan
      * en wordt alleen de nieuwe uri als alias onthouden.
      */
     public fun add(asset: MediaAsset): MediaCatalog {
-        val existing = byId[asset.id] ?: return copy(assets = assets + asset)
+        // Een alias op deze uri gaat over ander materiaal en is achterhaald zodra
+        // er nieuwe inhoud op diezelfde uri staat. Bleef hij staan, dan dook het
+        // oude asset weer op zodra het nieuwe verwijderd werd — en speelde een
+        // clip die naar die uri verwijst opeens andere beelden af.
+        val existing = byId[asset.id]
+            ?: return copy(assets = assets + asset, aliases = aliases - asset.uri)
         if (existing.uri == asset.uri || aliases[asset.uri] == asset.id) return this
         return copy(aliases = aliases + (asset.uri to existing.id))
     }
@@ -104,7 +122,12 @@ public data class MediaCatalog(
      */
     public fun replace(asset: MediaAsset): MediaCatalog {
         if (!contains(asset.id)) return this
-        return copy(assets = assets.map { if (it.id == asset.id) asset else it })
+        return copy(
+            assets = assets.map { if (it.id == asset.id) asset else it },
+            // Dezelfde reden als bij [add]: een alias van ander materiaal op deze
+            // uri is achterhaald zodra dit asset er zelf op komt te staan.
+            aliases = if (aliases[asset.uri] == asset.id) aliases else aliases - asset.uri,
+        )
     }
 
     public fun sorted(order: MediaSort, descending: Boolean = false): List<MediaAsset> {

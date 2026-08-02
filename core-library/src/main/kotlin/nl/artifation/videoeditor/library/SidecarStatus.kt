@@ -42,7 +42,15 @@ public data class AssetSidecarStatus(
     /** Precies het werk dat de analysepipeline nog moet doen, in enum-volgorde. */
     val needsAnalysis: List<AnalysisKind> get() = kindsWhere { it.needsAnalysis }
 
-    val isComplete: Boolean get() = needsAnalysis.isEmpty()
+    /**
+     * Ook een verouderde maskvideo is openstaand werk.
+     *
+     * [needsAnalysis] loopt alleen over de json-sidecars, dus een asset met een
+     * verse subjects.json en een verouderde `masks_0` gold als klaar en kwam
+     * nooit in [SidecarIndex.pending] terecht — de pipeline rendert die mask dan
+     * nooit opnieuw.
+     */
+    val isComplete: Boolean get() = needsAnalysis.isEmpty() && staleMaskIndices.isEmpty()
 
     val staleMaskIndices: List<Int>
         get() = masks.filterValues { it.needsAnalysis }.keys.sorted()
@@ -139,14 +147,34 @@ public class SidecarIndex(
             .sorted()
     }
 
-    /** Gooit één analyse weg, bijvoorbeeld omdat de gebruiker hem wil overdoen. */
-    public fun invalidate(assetId: String, kind: AnalysisKind): Boolean =
-        storage.delete(SidecarPaths.of(assetId, kind))
+    /**
+     * Gooit één analyse weg, bijvoorbeeld omdat de gebruiker hem wil overdoen.
+     *
+     * Bij [AnalysisKind.SUBJECTS] gaan de maskvideo's mee. Ze dragen dezelfde
+     * versie en komen uit dezelfde segmentatie ([writeMask] legt dat expliciet
+     * vast), dus zonder dat bleven de masks van de vorige run staan: een nieuwe
+     * run met één onderwerp schreef `masks_0` en `masks_1` en `masks_2` van de
+     * vorige keer telden gewoon mee als klaar.
+     */
+    public fun invalidate(assetId: String, kind: AnalysisKind): Boolean {
+        val removedJson = storage.delete(SidecarPaths.of(assetId, kind))
+        if (kind != AnalysisKind.SUBJECTS) return removedJson
 
-    /** Verwijdert alles wat bij een asset hoort; geeft de verwijderde paden terug. */
-    public fun purge(assetId: String): List<String> {
+        val removedMasks = maskIndices(assetId).map { storage.delete(SidecarPaths.mask(assetId, it)) }
+        return removedJson || removedMasks.any { it }
+    }
+
+    /**
+     * Verwijdert alles wat bij een asset hoort; geeft de verwijderde paden terug.
+     *
+     * @param keep paden die hoe dan ook blijven staan — een maskvideo die als
+     *   effect op een clip staat, bijvoorbeeld. `LibraryMaintenance.orphanSidecars`
+     *   beschermt die al; zonder dezelfde bescherming hier gooide `sweep` één
+     *   regel verderop alsnog weg wat net gespaard was.
+     */
+    public fun purge(assetId: String, keep: Set<String> = emptySet()): List<String> {
         val prefix = SidecarPaths.directory(assetId) + "/"
-        val victims = storage.paths().filter { it.startsWith(prefix) }
+        val victims = storage.paths().filter { it.startsWith(prefix) && it !in keep }
         victims.forEach(storage::delete)
         return victims
     }

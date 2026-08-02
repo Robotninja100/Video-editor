@@ -172,3 +172,146 @@ class LibrarySweepTest {
         assertTrue(index.state(gebruikt, AnalysisKind.TRANSCRIPT).isUsable, "opslag: ${storage.paths()}")
     }
 }
+
+/**
+ * Aliassen zijn er omdat Android per keuze een nieuwe `content://`-uri geeft.
+ * Wie ze bij het opruimen negeert, gooit bereikbaar materiaal weg — inclusief
+ * de analyses, en dat is betaald cloudwerk.
+ */
+class AliasAwareCleanupTest {
+
+    private val storage = InMemorySidecarStorage()
+    private val index = SidecarIndex(storage)
+
+    // Tweemaal hetzelfde bestand: gelijke grootte en duur, dus hetzelfde id.
+    private val eerste = testAsset(uri = "content://weg", sizeBytes = 99L)
+    private val tweede = testAsset(uri = "content://nog-hier", sizeBytes = 99L)
+    private val catalog = MediaCatalog().add(eerste).add(tweede)
+
+    @Test
+    fun `de tweede import telt mee bij de vraag of het bestand er nog is`() {
+        val ontbrekend = LibraryMaintenance.missingAssets(catalog) { it == "content://nog-hier" }
+
+        assertEquals(emptyList(), ontbrekend, "het bestand is gewoon te openen via de tweede uri")
+    }
+
+    @Test
+    fun `sweep gooit geen materiaal weg dat via een alias bereikbaar is`() {
+        for (kind in AnalysisKind.entries) index.write(eerste, kind)
+
+        val resultaat = LibraryMaintenance.sweep(catalog, index) { it == "content://nog-hier" }
+
+        assertEquals(emptyList(), resultaat.removedAssets)
+        assertEquals(emptyList(), resultaat.deletedSidecars, "de analyses zijn betaald werk")
+        assertEquals(1, resultaat.catalog.size)
+    }
+
+    @Test
+    fun `een echt verdwenen bestand gaat wel weg`() {
+        val resultaat = LibraryMaintenance.sweep(catalog, index) { false }
+
+        assertEquals(1, resultaat.removedAssets.size)
+        assertTrue(resultaat.catalog.isEmpty)
+    }
+
+    @Test
+    fun `sweep laat een maskvideo staan die een project nog gebruikt`() {
+        val ander = testAsset(uri = "content://ander", sizeBytes = 7L)
+        val maskPad = SidecarPaths.mask(eerste.id, 0)
+        index.writeMask(eerste, 0)
+        val projecten = listOf(projectUsing("content://ander", maskUris = listOf(maskPad)))
+
+        val resultaat = LibraryMaintenance.sweep(
+            catalog = catalog.add(ander),
+            index = index,
+            projects = projecten,
+            isPresent = { it == "content://ander" },
+        )
+
+        assertFalse(maskPad in resultaat.deletedSidecars, "orphanSidecars spaarde hem, sweep gooide hem alsnog weg")
+        assertTrue(storage.exists(maskPad), "de montage van de gebruiker is stuk")
+    }
+}
+
+class MaskLifecycleTest {
+
+    private val storage = InMemorySidecarStorage()
+    private val index = SidecarIndex(storage)
+    private val asset = testAsset()
+
+    @Test
+    fun `subjects opnieuw doen gooit de maskvideo's van de vorige ronde weg`() {
+        index.write(asset, AnalysisKind.SUBJECTS)
+        repeat(3) { index.writeMask(asset, it) }
+
+        index.invalidate(asset.id, AnalysisKind.SUBJECTS)
+
+        assertEquals(emptyList(), index.maskIndices(asset.id), "spookmaskers uit de vorige ronde")
+    }
+
+    @Test
+    fun `een andere analyse laat de maskvideo's met rust`() {
+        index.writeMask(asset, 0)
+
+        index.invalidate(asset.id, AnalysisKind.SCENES)
+
+        assertEquals(listOf(0), index.maskIndices(asset.id))
+    }
+
+    @Test
+    fun `een verouderde maskvideo zet het asset in de werkvoorraad`() {
+        val oud = asset.copy(sourceRevision = asset.sourceRevision - 1)
+        for (kind in AnalysisKind.entries) index.write(asset, kind)
+        index.writeMask(oud, 0)
+
+        val status = index.status(asset)
+
+        assertEquals(listOf(0), status.staleMaskIndices)
+        assertFalse(status.isComplete, "een verouderde mask is openstaand werk")
+        assertEquals(listOf(asset.id), index.pending(MediaCatalog.of(listOf(asset))).map { it.assetId })
+    }
+}
+
+class StaleAliasTest {
+
+    @Test
+    fun `een verwijderd asset herleeft niet als ander materiaal op zijn uri staat`() {
+        val oud = testAsset(uri = "content://1", displayName = "oud.mp4", sizeBytes = 1L)
+        val zelfdeBestand = testAsset(uri = "content://2", displayName = "oud.mp4", sizeBytes = 1L)
+        val nieuw = testAsset(uri = "content://2", displayName = "nieuw.mp4", sizeBytes = 2L)
+
+        val catalog = MediaCatalog().add(oud).add(zelfdeBestand).add(nieuw)
+        assertEquals("nieuw.mp4", catalog.byUri("content://2")?.displayName)
+
+        val na = catalog.remove(nieuw.id)
+
+        assertEquals(
+            null,
+            na.byUri("content://2"),
+            "het oude asset dook weer op onder een uri die niet meer van hem is",
+        )
+    }
+}
+
+class IdentityWithoutSizeTest {
+
+    @Test
+    fun `zonder grootte en zonder hash vallen twee clips van dezelfde duur niet samen`() {
+        val strand = testAsset(uri = "content://1", displayName = "strand.mp4", sizeBytes = 0L)
+        val feestje = testAsset(uri = "content://2", displayName = "feestje.mp4", sizeBytes = 0L)
+
+        assertTrue(strand.id != feestje.id, "beide kregen id ${strand.id}")
+
+        val catalog = MediaCatalog().add(strand).add(feestje)
+        assertEquals(2, catalog.size)
+        assertEquals("feestje.mp4", catalog.byUri("content://2")?.displayName)
+    }
+
+    @Test
+    fun `met een grootte blijft dezelfde inhoud wel hetzelfde asset`() {
+        val een = testAsset(uri = "content://1", sizeBytes = 5L)
+        val twee = testAsset(uri = "content://2", sizeBytes = 5L)
+
+        assertEquals(een.id, twee.id)
+    }
+}

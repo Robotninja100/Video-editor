@@ -67,7 +67,7 @@ public data class MediaAsset(
             sourceRevision: Long = 0L,
             contentHash: String? = null,
         ): MediaAsset = MediaAsset(
-            id = MediaIdentity.of(sizeBytes, durationUs, contentHash),
+            id = MediaIdentity.of(sizeBytes, durationUs, contentHash, uriFallback = uri),
             uri = uri,
             displayName = displayName,
             durationUs = durationUs,
@@ -103,18 +103,31 @@ public object MediaIdentity {
      * terug op grootte plus duur. De twee worden nooit gecombineerd, want dan
      * zouden twee importers — één met en één zonder hash — een ander id afgeven
      * voor hetzelfde bestand.
+     *
+     * Zonder hash **en** zonder grootte blijft alleen de duur over, en dat is
+     * geen identiteit: twee filmpjes van tien seconden kregen dan hetzelfde id,
+     * waarna het tweede nooit in de bibliotheek kwam en het transcript van het
+     * eerste voorgeschoteld kreeg. Niet elke `content://`-provider levert
+     * `OpenableColumns.SIZE`, dus dat geval is echt. In dat geval valt de
+     * identiteit terug op [uriFallback] — twee keer hetzelfde bestand kiezen
+     * geeft dan twee assets, en dat is de goede kant om fout te zitten.
      */
-    public fun of(sizeBytes: Long, durationUs: Us, contentHash: String? = null): String {
-        val key = if (!contentHash.isNullOrBlank()) {
-            "$SCHEMA|hash|$contentHash"
-        } else {
-            "$SCHEMA|stat|$sizeBytes|$durationUs"
+    public fun of(
+        sizeBytes: Long,
+        durationUs: Us,
+        contentHash: String? = null,
+        uriFallback: String? = null,
+    ): String {
+        val key = when {
+            !contentHash.isNullOrBlank() -> "$SCHEMA|hash|$contentHash"
+            sizeBytes > 0L -> "$SCHEMA|stat|$sizeBytes|$durationUs"
+            else -> "$SCHEMA|uri|${uriFallback.orEmpty()}|$durationUs"
         }
         return digest(key)
     }
 
     public fun of(asset: MediaAsset): String =
-        of(asset.sizeBytes, asset.durationUs, asset.contentHash)
+        of(asset.sizeBytes, asset.durationUs, asset.contentHash, asset.uri)
 
     private fun digest(key: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(key.toByteArray(Charsets.UTF_8))
