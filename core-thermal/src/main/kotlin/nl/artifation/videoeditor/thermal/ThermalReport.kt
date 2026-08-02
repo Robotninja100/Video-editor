@@ -34,14 +34,16 @@ public data class ThermalReport(
  * Duur in gewone taal. Bewust grof: een schatting op de seconde nauwkeurig
  * suggereert een precisie die er niet is, en flikkert bij elke herberekening.
  */
+private const val MS_PER_MINUTE = 60_000L
+
 internal fun formatDuration(ms: Long): String = when {
     ms < 1_000L -> "een moment"
-    ms < 60_000L -> {
+    ms < MS_PER_MINUTE -> {
         val seconds = (ms / 1_000.0).roundToLong()
         if (seconds == 1L) "1 seconde" else "$seconds seconden"
     }
     else -> {
-        val minutes = (ms / 60_000.0).roundToLong().coerceAtLeast(1L)
+        val minutes = (ms.toDouble() / MS_PER_MINUTE).roundToLong().coerceAtLeast(1L)
         if (minutes == 1L) "1 minuut" else "$minutes minuten"
     }
 }

@@ -14,6 +14,9 @@ import nl.artifation.videoeditor.model.NormRect
  */
 public object Segmentation {
 
+    /** De dienst rekent per blok van zestien frames af, niet per frame. */
+    private const val FRAMES_PER_BILLING_UNIT = 16.0
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -48,7 +51,7 @@ public object Segmentation {
         /** Geschatte kosten, om de gebruiker vooraf te kunnen waarschuwen. */
         public fun estimatedUsd(durationSeconds: Double, usdPer16Frames: Double = 0.005): Double {
             val frames = durationSeconds * trackingFps
-            return frames / 16.0 * usdPer16Frames
+            return frames / FRAMES_PER_BILLING_UNIT * usdPer16Frames
         }
     }
 

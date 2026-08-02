@@ -137,31 +137,41 @@ public class ChunkScheduler private constructor(
      */
     public fun next(status: ThermalStatus, nowMs: Long): ChunkPlan {
         if (isDone) return ChunkPlan.Done
+        return resumeOutstanding(status) ?: decide(status, nowMs)
+    }
 
-        // Een onderhanden blok komt onveranderd terug — behalve als het toestel
-        // zichzelf uitzet. Zonder deze uitzondering was `Stopped` onbereikbaar
-        // zolang er een blok in de lucht hing, en bleef de aanroeper doorwerken
-        // terwijl het toestel uitging.
-        outstanding?.let { onderhanden ->
-            if (status < ThermalStatus.SHUTDOWN) {
-                return ChunkPlan.Work(onderhanden, lastDecision?.status ?: status)
-            }
+    /**
+     * Een onderhanden blok komt onveranderd terug — behalve als het toestel
+     * zichzelf uitzet. Zonder die uitzondering was `Stopped` onbereikbaar zolang
+     * er een blok in de lucht hing, en bleef de aanroeper doorwerken terwijl het
+     * toestel uitging.
+     */
+    private fun resumeOutstanding(status: ThermalStatus): ChunkPlan? {
+        if (status >= ThermalStatus.SHUTDOWN) {
             outstanding = null
         }
+        return outstanding?.let { ChunkPlan.Work(it, lastDecision?.status ?: status) }
+    }
 
+    private fun decide(status: ThermalStatus, nowMs: Long): ChunkPlan {
         val decision = governor.observe(status, nowMs)
         state = state.copy(thermal = governor.state)
         lastDecision = decision
         lastDecisionAtMs = nowMs
 
-        if (!decision.resumable) {
-            return ChunkPlan.Stopped(decision.reason ?: PauseReason.SHUTDOWN_IMMINENT, status)
-        }
-        if (decision.paused) {
-            return ChunkPlan.Pause(decision.waitMs, decision.reason ?: PauseReason.OVERHEATED, status)
-        }
+        return when {
+            !decision.resumable ->
+                ChunkPlan.Stopped(decision.reason ?: PauseReason.SHUTDOWN_IMMINENT, status)
 
-        // Het laatste blok is meestal kleiner dan de blokgrootte; nooit voorbij het einde.
+            decision.paused ->
+                ChunkPlan.Pause(decision.waitMs, decision.reason ?: PauseReason.OVERHEATED, status)
+
+            else -> issue(decision, status, nowMs)
+        }
+    }
+
+    /** Het laatste blok is meestal kleiner dan de blokgrootte; nooit voorbij het einde. */
+    private fun issue(decision: ThermalDecision, status: ThermalStatus, nowMs: Long): ChunkPlan {
         val size = min(decision.chunkSize, remainingUnits)
         val chunk = WorkChunk(state.completedUnits, state.completedUnits + size)
         outstanding = chunk

@@ -85,8 +85,11 @@ public class ProjectRepository(
             // Zonder goed bestand is de autosave het enige wat er is; dan valt er
             // niets te kiezen en wordt hij hoe dan ook gepromoveerd.
             is RecoveryPlan.OfferAutosave ->
-                if (acceptAutosave || plan.saved == null) promoteAutosave(id)
-                else store.load(id, ProjectSlot.MAIN)
+                if (acceptAutosave || plan.saved == null) {
+                    promoteAutosave(id)
+                } else {
+                    store.load(id, ProjectSlot.MAIN)
+                }
 
             is RecoveryPlan.Unrecoverable -> throw plan.asException()
         }

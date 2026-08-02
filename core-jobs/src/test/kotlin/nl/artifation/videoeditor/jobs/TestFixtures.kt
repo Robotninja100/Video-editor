@@ -1,3 +1,7 @@
+// Het bestand heet naar wat het is — de gedeelde fixtures van deze module.
+// `FakeThermalGate` is er toevallig het enige type van; de rest zijn bouwers.
+@file:Suppress("MatchingDeclarationName")
+
 package nl.artifation.videoeditor.jobs
 
 import nl.artifation.videoeditor.errors.EditorError

@@ -1,5 +1,7 @@
 package nl.artifation.videoeditor.project
 
+import nl.artifation.videoeditor.errors.EditorError
+import nl.artifation.videoeditor.errors.RetryPolicy
 import java.io.FileNotFoundException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -9,8 +11,6 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
-import nl.artifation.videoeditor.errors.EditorError
-import nl.artifation.videoeditor.errors.RetryPolicy
 
 /**
  * Eén voorbeeld van elke projectfout.

@@ -111,7 +111,10 @@ public object Transcription {
         text = word.trim(),
     )
 
-    private fun Double.toUs(): Long = (this * 1_000_000.0).roundToLong()
+    /** De dienst antwoordt in seconden, de rest van dit project rekent in microseconden. */
+    private const val US_PER_SECOND = 1_000_000.0
+
+    private fun Double.toUs(): Long = (this * US_PER_SECOND).roundToLong()
 }
 
 /**

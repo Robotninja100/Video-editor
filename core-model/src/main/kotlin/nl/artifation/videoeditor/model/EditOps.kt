@@ -87,7 +87,7 @@ public fun Sequence.overwriteAt(atUs: Us, item: TimelineItem): Sequence {
     val split = padded.splitAt(atUs).splitAt(endUs)
     val starts = split.itemStartsUs()
 
-    val before = split.items.filterIndexed { i, it -> starts[i] + it.durationUs <= atUs }
+    val before = split.items.filterIndexed { i, item -> starts[i] + item.durationUs <= atUs }
     val after = split.items.filterIndexed { i, _ -> starts[i] >= endUs }
 
     return split.copy(items = before + item + after)

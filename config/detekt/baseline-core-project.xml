@@ -1,16 +1,5 @@
 <?xml version="1.0" ?>
 <SmellBaseline>
   <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>Filename:ProjectStoreTest.kt$nl.artifation.videoeditor.project.ProjectStoreTest.kt</ID>
-    <ID>ImportOrdering:ProjectErrorsTest.kt$import java.io.FileNotFoundException import kotlin.test.Test import kotlin.test.assertEquals import kotlin.test.assertFailsWith import kotlin.test.assertFalse import kotlin.test.assertIs import kotlin.test.assertNull import kotlin.test.assertSame import kotlin.test.assertTrue import nl.artifation.videoeditor.errors.EditorError import nl.artifation.videoeditor.errors.RetryPolicy</ID>
-    <ID>MatchingDeclarationName:ProjectStoreTest.kt$InMemoryProjectStoreTest</ID>
-    <ID>MultiLineIfElse:ProjectRepository.kt$ProjectRepository$promoteAutosave(id)</ID>
-    <ID>MultiLineIfElse:ProjectRepository.kt$ProjectRepository$store.load(id, ProjectSlot.MAIN)</ID>
-    <ID>SwallowedException:CrashRecovery.kt$CrashRecovery$e: CorruptProjectException</ID>
-    <ID>SwallowedException:ProjectCodec.kt$ProjectCodec$e: CorruptProjectException</ID>
-    <ID>SwallowedException:ProjectStore.kt$ProjectStore$e: ProjectException</ID>
-    <ID>ThrowsCount:ProjectCodec.kt$ProjectCodec$private fun parse(text: String): JsonObject</ID>
-    <ID>UseCheckOrError:ProjectStore.kt$InMemoryProjectStore$throw IllegalStateException("gesimuleerde schrijffout voor $id/$slot")</ID>
-  </CurrentIssues>
+  <CurrentIssues/>
 </SmellBaseline>

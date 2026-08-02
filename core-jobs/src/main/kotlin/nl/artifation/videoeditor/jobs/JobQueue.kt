@@ -19,6 +19,10 @@ import nl.artifation.videoeditor.model.Us
  * maar met een tijdstip op de taak ([Job.notBeforeUs]): de wachtrij slaat zo'n
  * taak over tot de laag erboven met een later [Us] terugkomt.
  */
+// Een wachtrij heeft nu eenmaal veel werkwoorden: toevoegen, starten, melden,
+// afronden, falen, opnieuw proberen, annuleren, opvragen. Ze opsplitsen zou de
+// toestand over twee klassen verdelen, en dát is waar wachtrijen stuk op gaan.
+@Suppress("TooManyFunctions")
 public class JobQueue(
     private val gate: ThermalGate,
     initial: List<Job> = emptyList(),

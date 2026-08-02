@@ -91,7 +91,9 @@ public interface ProjectStore {
         val text = readRaw(id, ProjectSlot.MAIN) ?: return null
         return try {
             ProjectCodec.decodeSummary(text)
-        } catch (e: ProjectException) {
+        } catch (ignored: ProjectException) {
+            // Bewust genegeerd: deze functie beantwoordt "staat er een leesbare
+            // kop?", en `damagedIds()` gebruikt juist dat antwoord.
             null
         }
     }
@@ -122,7 +124,7 @@ public class InMemoryProjectStore : ProjectStore {
     override fun writeRaw(id: String, slot: ProjectSlot, text: String) {
         val key = Key(id, slot)
         if (failing.remove(key)) {
-            throw IllegalStateException("gesimuleerde schrijffout voor $id/$slot")
+            error("gesimuleerde schrijffout voor $id/$slot")
         }
         files[key] = text
         writeCount++

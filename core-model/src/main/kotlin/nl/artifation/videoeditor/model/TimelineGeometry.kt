@@ -61,24 +61,29 @@ public data class TimelineGeometry(
 
     /** Welke clip ligt er onder ([x], [y])? Gaten tellen niet mee. */
     public fun hitTest(sequences: List<Sequence>, x: Float, y: Float): Hit? {
-        if (y < rulerHeightPx) return null
+        val trackIndex = trackAt(x, y, sequences.size) ?: return null
+        return clipAt(sequences[trackIndex], trackIndex, timeAt(x))
+    }
 
-        // Links van de oorsprong ligt niets. `timeAt` klemt daar naar 0, wat voor
-        // scrubben klopt maar hier een treffer op de eerste clip zou opleveren
-        // terwijl de vinger buiten de tijdlijn zit — bereikbaar tijdens slepen.
-        if (x + scrollPx < 0f) return null
+    /** De track onder ([x], [y]), of null als daar geen track ligt. */
+    private fun trackAt(x: Float, y: Float, trackCount: Int): Int? {
+        // Boven de liniaal ligt geen track, en links van de oorsprong ligt niets.
+        // `timeAt` klemt daar naar 0 — juist voor scrubben, maar hier zou dat een
+        // treffer op de eerste clip geven terwijl de vinger buiten de tijdlijn
+        // zit; bereikbaar tijdens slepen.
+        if (y < rulerHeightPx || x + scrollPx < 0f) return null
 
-        val trackIndex = ((y - rulerHeightPx) / (trackHeightPx + trackGapPx)).toInt()
-        if (trackIndex !in sequences.indices) return null
+        val index = ((y - rulerHeightPx) / (trackHeightPx + trackGapPx)).toInt()
         // In de tussenruimte tussen twee tracks zit geen clip. De track beslaat
         // [trackTop, trackTop + hoogte); die bovengrens hoort al bij het gat.
-        val withinTrack = (y - trackTop(trackIndex))
-        if (withinTrack < 0f || withinTrack >= trackHeightPx) return null
+        val withinTrack = y - trackTop(index)
+        return index.takeIf {
+            index < trackCount && withinTrack >= 0f && withinTrack < trackHeightPx
+        }
+    }
 
-        val atUs = timeAt(x)
-        val sequence = sequences[trackIndex]
+    private fun clipAt(sequence: Sequence, trackIndex: Int, atUs: Us): Hit? {
         var cursorUs = 0L
-
         sequence.items.forEachIndexed { itemIndex, item ->
             val startUs = cursorUs
             cursorUs += item.durationUs

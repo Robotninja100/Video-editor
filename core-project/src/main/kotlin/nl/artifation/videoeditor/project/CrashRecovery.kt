@@ -132,7 +132,9 @@ public object CrashRecovery {
     private fun summaryOrNull(text: String): ProjectSummary? =
         try {
             ProjectCodec.decodeSummary(text)
-        } catch (e: CorruptProjectException) {
+        } catch (ignored: CorruptProjectException) {
+            // Bewust genegeerd: hier telt alleen óf de kop leesbaar is. Wat er
+            // precies stuk was, komt bij het openen naar boven met een melding.
             null
         }
 }

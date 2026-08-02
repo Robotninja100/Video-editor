@@ -1,8 +1,5 @@
 <?xml version="1.0" ?>
 <SmellBaseline>
   <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>MagicNumber:Segmentation.kt$Segmentation.Request$16.0</ID>
-    <ID>MagicNumber:Transcription.kt$Transcription$1_000_000.0</ID>
-  </CurrentIssues>
+  <CurrentIssues/>
 </SmellBaseline>

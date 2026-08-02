@@ -88,6 +88,10 @@ public object ProjectCodec {
         // Een afgekapt bestand van 0 bytes is de normale uitkomst van een crash
         // midden in een schrijfactie; die verdient een begrijpelijke fout.
         if (text.isBlank()) throw CorruptProjectException("projectbestand is leeg")
+        return parseObject(text)
+    }
+
+    private fun parseObject(text: String): JsonObject {
         val element = try {
             json.parseToJsonElement(text)
         } catch (e: SerializationException) {
