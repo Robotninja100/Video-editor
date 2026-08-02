@@ -55,6 +55,10 @@ public object ErrorLog {
         addAll(fieldsOf(error))
     }.joinToString(" ")
 
+    // Eén tak per foutsoort, en dat hoort zo: dit `when` is uitputtend, dus een
+    // nieuwe foutsoort dwingt hier een logregel af. Opsplitsen zou juist die
+    // garantie weggooien, en dat is precies waar deze functie voor bestaat.
+    @Suppress("CyclomaticComplexMethod")
     private fun fieldsOf(error: EditorError): List<String> = when (error) {
         is EditorError.OutOfStorage -> listOf(
             "required=${error.requiredBytes}",

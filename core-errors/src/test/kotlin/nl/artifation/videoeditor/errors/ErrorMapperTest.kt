@@ -149,7 +149,8 @@ class ThrowableMappingTest {
 
     @Test
     fun `een volle schijf wordt herkend aan de melding van de kernel`() {
-        val error = ErrorMapper.fromThrowable(IOException("write failed: ENOSPC (No space left on device)"), path = SAMPLE_PATH)
+        val vol = IOException("write failed: ENOSPC (No space left on device)")
+        val error = ErrorMapper.fromThrowable(vol, path = SAMPLE_PATH)
 
         assertEquals(EditorError.OutOfStorage(requiredBytes = 0L, availableBytes = 0L), error)
         assertFalse(error!!.retryable, "wachten maakt de schijf niet leger")
@@ -186,7 +187,10 @@ class ThrowableMappingTest {
 
     @Test
     fun `de oorzaak onder een omhullende exceptie telt`() {
-        val diep = RuntimeException("kon niet transcriberen", IllegalStateException("mislukt", UnknownHostException("host")))
+        val diep = RuntimeException(
+            "kon niet transcriberen",
+            IllegalStateException("mislukt", UnknownHostException("host")),
+        )
 
         assertEquals(EditorError.NetworkUnavailable(DIENST), ErrorMapper.fromThrowable(diep, service = DIENST))
     }

@@ -12,6 +12,11 @@ internal const val KB: Long = 1024L
 internal const val MB: Long = 1024L * KB
 internal const val GB: Long = 1024L * MB
 
+/** Eén cijfer achter de komma, gerekend in tienden. */
+private const val TENTHS: Long = 10L
+
+private const val MS_PER_MINUTE: Long = 60_000L
+
 /** Deelt naar boven af — bij "maak ruimte vrij" is te weinig vragen erger dan te veel. */
 private fun ceilDiv(value: Long, divisor: Long): Long = (value + divisor - 1) / divisor
 
@@ -26,8 +31,10 @@ internal fun formatBytes(bytes: Long): String {
     val safe = bytes.coerceAtLeast(0L)
     return when {
         safe >= GB -> {
-            val tenths = ceilDiv(safe * 10L, GB)
-            if (tenths % 10L == 0L) "${tenths / 10L} GB" else "${tenths / 10L},${tenths % 10L} GB"
+            val tenths = ceilDiv(safe * TENTHS, GB)
+            val heel = tenths / TENTHS
+            val rest = tenths % TENTHS
+            if (rest == 0L) "$heel GB" else "$heel,$rest GB"
         }
         safe >= MB -> "${ceilDiv(safe, MB)} MB"
         safe >= KB -> "${ceilDiv(safe, KB)} kB"
@@ -56,4 +63,5 @@ internal fun String.sentenceStart(): String = replaceFirstChar { it.uppercaseCha
 internal fun String.midSentence(): String = replaceFirstChar { it.lowercaseChar() }
 
 /** Naar boven afgeronde minuten; minimaal één, want "wacht 0 minuten" is geen advies. */
-internal fun minutesRoundedUp(millis: Long): Long = ceilDiv(millis.coerceAtLeast(1L), 60_000L).coerceAtLeast(1L)
+internal fun minutesRoundedUp(millis: Long): Long =
+    ceilDiv(millis.coerceAtLeast(1L), MS_PER_MINUTE).coerceAtLeast(1L)

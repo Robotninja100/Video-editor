@@ -1,35 +1,5 @@
 <?xml version="1.0" ?>
 <SmellBaseline>
   <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>ArgumentListWrapping:EditorError.kt$InputProblem.FILE_TOO_LARGE$("Het bestand is te groot voor deze bewerking. Knip het eerst in kortere stukken en probeer het opnieuw.")</ID>
-    <ID>ArgumentListWrapping:EditorError.kt$InputProblem.UNSUPPORTED_LANGUAGE$("Deze taal kan nog niet automatisch ondertiteld worden. Kies een andere taal en probeer het opnieuw.")</ID>
-    <ID>CyclomaticComplexMethod:ErrorLog.kt$ErrorLog$private fun fieldsOf(error: EditorError): List&lt;String&gt;</ID>
-    <ID>CyclomaticComplexMethod:ErrorMapper.kt$ErrorMapper$private fun classify( throwable: Throwable, path: String?, service: RemoteService?, ): EditorError?</ID>
-    <ID>MagicNumber:ErrorMapper.kt$ErrorMapper$400</ID>
-    <ID>MagicNumber:ErrorMapper.kt$ErrorMapper$401</ID>
-    <ID>MagicNumber:ErrorMapper.kt$ErrorMapper$403</ID>
-    <ID>MagicNumber:ErrorMapper.kt$ErrorMapper$408</ID>
-    <ID>MagicNumber:ErrorMapper.kt$ErrorMapper$413</ID>
-    <ID>MagicNumber:ErrorMapper.kt$ErrorMapper$429</ID>
-    <ID>MagicNumber:Text.kt$10L</ID>
-    <ID>MagicNumber:Text.kt$60_000L</ID>
-    <ID>MaxLineLength:EditorError.kt$InputProblem$FILE_TOO_LARGE : InputProblem</ID>
-    <ID>MaxLineLength:EditorError.kt$InputProblem$UNSUPPORTED_LANGUAGE : InputProblem</ID>
-    <ID>MaxLineLength:ErrorMapperTest.kt$ThrowableMappingTest$val diep = RuntimeException("kon niet transcriberen", IllegalStateException("mislukt", UnknownHostException("host")))</ID>
-    <ID>MaxLineLength:ErrorMapperTest.kt$ThrowableMappingTest$val error = ErrorMapper.fromThrowable(IOException("write failed: ENOSPC (No space left on device)"), path = SAMPLE_PATH)</ID>
-    <ID>MaxLineLength:RetryPolicyTest.kt$JitterTest$assertTrue(wachttijden.all { it in 3_000L..5_000L }, "buiten het jitterbereik: ${wachttijden.filter { it !in 3_000L..5_000L }}")</ID>
-    <ID>MaxLineLength:RetryPolicyTest.kt$JitterTest$assertTrue(wachttijden.toSet().size &gt; 50, "te weinig spreiding: ${wachttijden.toSet().size} verschillende waarden")</ID>
-    <ID>MaxLineLength:RetryPolicyTest.kt$JitterTest$val ruim = RetryPolicy(maxAttempts = 6, baseDelayMs = 1_000L, maxDelayMs = 4_000L, multiplier = 3.0, jitterRatio = 1.0)</ID>
-    <ID>MaxLineLength:RetryPolicyTest.kt$RetryPolicyTest$val steil = RetryPolicy(maxAttempts = 5, baseDelayMs = 1_000L, maxDelayMs = 3_000L, multiplier = 10.0, jitterRatio = 0.0)</ID>
-    <ID>MaximumLineLength:EditorError.kt$InputProblem$ </ID>
-    <ID>MaximumLineLength:ErrorMapperTest.kt$ThrowableMappingTest$ </ID>
-    <ID>MaximumLineLength:RetryPolicyTest.kt$JitterTest$ </ID>
-    <ID>MaximumLineLength:RetryPolicyTest.kt$RetryPolicyTest$ </ID>
-    <ID>MultiLineIfElse:ErrorMapper.kt$ErrorMapper$EditorError.FileUnreadable(path, detailOf(throwable))</ID>
-    <ID>MultiLineIfElse:ErrorMapper.kt$ErrorMapper$EditorError.NetworkUnavailable(service)</ID>
-    <ID>PropertyWrapping:ErrorMapperTest.kt$ThrowableMappingTest$val diep = RuntimeException("kon niet transcriberen", IllegalStateException("mislukt", UnknownHostException("host")))</ID>
-    <ID>PropertyWrapping:RetryPolicyTest.kt$JitterTest$val ruim = RetryPolicy(maxAttempts = 6, baseDelayMs = 1_000L, maxDelayMs = 4_000L, multiplier = 3.0, jitterRatio = 1.0)</ID>
-    <ID>PropertyWrapping:RetryPolicyTest.kt$RetryPolicyTest$val steil = RetryPolicy(maxAttempts = 5, baseDelayMs = 1_000L, maxDelayMs = 3_000L, multiplier = 10.0, jitterRatio = 0.0)</ID>
-  </CurrentIssues>
+  <CurrentIssues/>
 </SmellBaseline>

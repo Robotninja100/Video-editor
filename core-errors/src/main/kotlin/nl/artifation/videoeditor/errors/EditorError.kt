@@ -45,8 +45,14 @@ public enum class InputProblem(public val message: String) {
     EMPTY_TIMELINE("De tijdlijn is nog leeg. Zet eerst een clip op de tijdlijn en probeer het opnieuw."),
     SELECTION_TOO_SHORT("De selectie is korter dan één beeld. Maak de selectie iets langer en probeer het opnieuw."),
     REVERSED_RANGE("Het eindpunt ligt voor het beginpunt. Sleep de uiteinden goed en probeer het opnieuw."),
-    FILE_TOO_LARGE("Het bestand is te groot voor deze bewerking. Knip het eerst in kortere stukken en probeer het opnieuw."),
-    UNSUPPORTED_LANGUAGE("Deze taal kan nog niet automatisch ondertiteld worden. Kies een andere taal en probeer het opnieuw."),
+    FILE_TOO_LARGE(
+        "Het bestand is te groot voor deze bewerking. " +
+            "Knip het eerst in kortere stukken en probeer het opnieuw.",
+    ),
+    UNSUPPORTED_LANGUAGE(
+        "Deze taal kan nog niet automatisch ondertiteld worden. " +
+            "Kies een andere taal en probeer het opnieuw.",
+    ),
     NO_AUDIO_TRACK("Dit materiaal heeft geen geluid, dus er valt niets te ondertitelen. Kies een clip met geluid."),
     UNRESOLVED_RECOVERY(
         "Dit project heeft nog wijzigingen van een vorige keer die niet zijn afgerond. " +

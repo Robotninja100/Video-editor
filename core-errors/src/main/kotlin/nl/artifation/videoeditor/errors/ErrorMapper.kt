@@ -7,7 +7,6 @@ import java.io.InterruptedIOException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.SocketException
-import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.nio.file.AccessDeniedException
 import java.nio.file.NoSuchFileException
@@ -28,6 +27,16 @@ public object ErrorMapper {
     /** Hoe diep we een keten van oorzaken volgen voordat we het opgeven. */
     private const val MAX_CAUSE_DEPTH = 8
 
+    // Alleen de statussen die deze mapper apart behandelt; de rest valt in de
+    // vangnet-tak. `java.net.HttpURLConnection` kent er een paar, maar niet 429,
+    // en half uit de ene bron putten en half uit de andere leest slechter.
+    private const val HTTP_BAD_REQUEST = 400
+    private const val HTTP_UNAUTHORIZED = 401
+    private const val HTTP_FORBIDDEN = 403
+    private const val HTTP_REQUEST_TIMEOUT = 408
+    private const val HTTP_PAYLOAD_TOO_LARGE = 413
+    private const val HTTP_TOO_MANY_REQUESTS = 429
+
     /**
      * Vertaalt een HTTP-status naar de taxonomie, of null bij een geslaagd antwoord.
      *
@@ -39,17 +48,17 @@ public object ErrorMapper {
         body: String? = null,
         retryAfterSeconds: Long? = null,
     ): EditorError? {
-        if (statusCode < 400) return null
+        if (statusCode < HTTP_BAD_REQUEST) return null
         val retryAfterMs = retryAfterSeconds?.times(1_000L)
         val detail = body?.let { ErrorLog.redact(it).take(MAX_DETAIL_LENGTH) }?.ifBlank { null }
 
         return when (statusCode) {
             // Afgewezen toegang blijft afgewezen tot iemand de gegevens goedzet.
-            401, 403 -> EditorError.AuthenticationRejected(service)
-            408 -> EditorError.ServiceTimeout(service)
+            HTTP_UNAUTHORIZED, HTTP_FORBIDDEN -> EditorError.AuthenticationRejected(service)
+            HTTP_REQUEST_TIMEOUT -> EditorError.ServiceTimeout(service)
             // Te groot materiaal is een eigenschap van de invoer, geen storing.
-            413 -> EditorError.InvalidInput(InputProblem.FILE_TOO_LARGE)
-            429 -> EditorError.RateLimited(service, retryAfterMs)
+            HTTP_PAYLOAD_TOO_LARGE -> EditorError.InvalidInput(InputProblem.FILE_TOO_LARGE)
+            HTTP_TOO_MANY_REQUESTS -> EditorError.RateLimited(service, retryAfterMs)
             else -> EditorError.ServiceFailure(
                 service = service,
                 statusCode = statusCode,
@@ -103,32 +112,54 @@ public object ErrorMapper {
 
         is CancellationException -> EditorError.Cancelled()
 
+        is SecurityException ->
+            EditorError.FileUnreadable(path ?: pathFromMessage(throwable), detailOf(throwable))
+
+        // Vrijwel alles wat hier langskomt is een IOException; het onderscheid
+        // zit in de subklasse, en dat is een verhaal op zich.
+        is IOException -> classifyIo(throwable, path, service)
+
+        else -> null
+    }
+
+    /**
+     * De volgorde is hier niet vrij. De netwerk-subklassen zijn specifieker dan
+     * de bestands-subklassen, en beide zijn specifieker dan `IOException` zelf —
+     * die laatste is de vangnet-tak onderaan.
+     */
+    private fun classifyIo(
+        throwable: IOException,
+        path: String?,
+        service: RemoteService?,
+    ): EditorError? = when (throwable) {
         is FileNotFoundException, is NoSuchFileException ->
             EditorError.FileMissing(path ?: pathFromMessage(throwable))
 
-        is AccessDeniedException, is SecurityException ->
+        is AccessDeniedException ->
             EditorError.FileUnreadable(path ?: pathFromMessage(throwable), detailOf(throwable))
 
-        // Eerst de netwerkkant van IOException, want die is een stuk specifieker.
-        is SocketTimeoutException -> EditorError.ServiceTimeout(service)
+        // SocketTimeoutException is een InterruptedIOException; beide betekenen
+        // hetzelfde voor de gebruiker.
         is InterruptedIOException -> EditorError.ServiceTimeout(service)
+
         is UnknownHostException, is ConnectException, is NoRouteToHostException, is SocketException ->
             EditorError.NetworkUnavailable(service)
 
         // Een afgebroken stroom betekent iets anders per kant: een half bestand
         // is stuk, een half antwoord is een verbinding die wegviel.
         is EOFException ->
-            if (path != null) EditorError.FileUnreadable(path, detailOf(throwable))
-            else EditorError.NetworkUnavailable(service)
+            if (path != null) {
+                EditorError.FileUnreadable(path, detailOf(throwable))
+            } else {
+                EditorError.NetworkUnavailable(service)
+            }
 
-        is IOException -> when {
+        else -> when {
             isOutOfSpace(throwable) -> EditorError.OutOfStorage(requiredBytes = 0L, availableBytes = 0L)
             path != null -> EditorError.FileUnreadable(path, detailOf(throwable))
             service != null -> EditorError.NetworkUnavailable(service)
             else -> null
         }
-
-        else -> null
     }
 
     /**

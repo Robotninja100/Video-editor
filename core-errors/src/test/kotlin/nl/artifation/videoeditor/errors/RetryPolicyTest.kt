@@ -42,7 +42,13 @@ class RetryPolicyTest {
 
     @Test
     fun `de wachttijd loopt tegen de bovengrens aan`() {
-        val steil = RetryPolicy(maxAttempts = 5, baseDelayMs = 1_000L, maxDelayMs = 3_000L, multiplier = 10.0, jitterRatio = 0.0)
+        val steil = RetryPolicy(
+            maxAttempts = 5,
+            baseDelayMs = 1_000L,
+            maxDelayMs = 3_000L,
+            multiplier = 10.0,
+            jitterRatio = 0.0,
+        )
 
         assertEquals(1_000L, steil.delayMsFor(NETWERK, attemptsSoFar = 1))
         assertEquals(3_000L, steil.delayMsFor(NETWERK, attemptsSoFar = 2))
@@ -119,13 +125,25 @@ class JitterTest {
 
         val wachttijden = List(200) { metJitter.delayMsFor(NETWERK, attemptsSoFar = 3, jitter = jitter)!! }
 
-        assertTrue(wachttijden.toSet().size > 50, "te weinig spreiding: ${wachttijden.toSet().size} verschillende waarden")
-        assertTrue(wachttijden.all { it in 3_000L..5_000L }, "buiten het jitterbereik: ${wachttijden.filter { it !in 3_000L..5_000L }}")
+        assertTrue(
+            wachttijden.toSet().size > 50,
+            "te weinig spreiding: ${wachttijden.toSet().size} verschillende waarden",
+        )
+        assertTrue(
+            wachttijden.all { it in 3_000L..5_000L },
+            "buiten het jitterbereik: ${wachttijden.filter { it !in 3_000L..5_000L }}",
+        )
     }
 
     @Test
     fun `jitter tilt de wachttijd nooit over de bovengrens`() {
-        val ruim = RetryPolicy(maxAttempts = 6, baseDelayMs = 1_000L, maxDelayMs = 4_000L, multiplier = 3.0, jitterRatio = 1.0)
+        val ruim = RetryPolicy(
+            maxAttempts = 6,
+            baseDelayMs = 1_000L,
+            maxDelayMs = 4_000L,
+            multiplier = 3.0,
+            jitterRatio = 1.0,
+        )
 
         val wachttijd = ruim.delayMsFor(NETWERK, attemptsSoFar = 5, jitter = { 1.0 })
 
