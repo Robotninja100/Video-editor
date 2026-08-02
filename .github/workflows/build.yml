@@ -20,13 +20,30 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      # Media3 1.10.1 eist compileSdk 36. De runner heeft de SDK wel aan boord,
+      # maar niet noodzakelijk dat platform, dus expliciet installeren.
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0 platform-tools"
+
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Alleen de pure-JVM modules; de Android-modules bestaan nog niet.
-      # Zie docs/CHECKLIST.md.
       - name: Bouwen en testen
         run: ./gradlew build --stacktrace
+
+      # De spike is alleen op een echt toestel te draaien, dus elke push levert
+      # een installeerbare APK op. Zie docs/CHECKLIST.md §Fase 0.
+      - name: APK bouwen
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: APK bewaren
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-editor-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
       - name: Testrapport bewaren
         if: failure()
