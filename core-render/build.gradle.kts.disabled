@@ -31,8 +31,15 @@ dependencies {
 
     // Gepind: CompositionPlayer is @ExperimentalApi en breekt tussen versies.
     // Herbeoordeel bewust, niet als bijvangst van een upgrade.
-    implementation("androidx.media3:media3-transformer:1.10.1")
+    //
+    // `api` en niet `implementation` voor transformer en common: CompositionMapper
+    // geeft een `Composition` terug, dus dat type staat in de publieke API van
+    // deze module. Met `implementation` staat het niet op het compileerpad van
+    // :app en is de mapper daar niet aan te roepen.
+    api("androidx.media3:media3-transformer:1.10.1")
+    api("androidx.media3:media3-common:1.10.1")
+
+    // Alleen intern gebruikt, door MaskedBlurShaderProgram.
     implementation("androidx.media3:media3-effect:1.10.1")
-    implementation("androidx.media3:media3-common:1.10.1")
     implementation("androidx.media3:media3-exoplayer:1.10.1")
 }

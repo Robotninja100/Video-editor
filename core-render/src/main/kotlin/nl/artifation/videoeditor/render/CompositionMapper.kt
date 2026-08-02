@@ -1,8 +1,9 @@
 package nl.artifation.videoeditor.render
 
-import android.content.Context
 import android.net.Uri
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.Crop
 import androidx.media3.effect.Presentation
@@ -15,6 +16,7 @@ import nl.artifation.videoeditor.model.PlannedClip
 import nl.artifation.videoeditor.model.PlannedEffect
 import nl.artifation.videoeditor.model.PlannedGap
 import nl.artifation.videoeditor.model.PlannedSequence
+import nl.artifation.videoeditor.model.US_PER_MS
 
 /**
  * Het enige koppelvlak met Media3.
@@ -31,7 +33,7 @@ import nl.artifation.videoeditor.model.PlannedSequence
  * geschreven is; deze module staat nog niet in `settings.gradle.kts`.
  */
 @UnstableApi
-public class CompositionMapper(private val context: Context) {
+public class CompositionMapper {
 
     public fun map(plan: CompositionPlan): Composition {
         val sequences = plan.sequences.map { mapSequence(it, plan) }
@@ -55,10 +57,15 @@ public class CompositionMapper(private val context: Context) {
     private fun mapClip(clip: PlannedClip, plan: CompositionPlan): EditedMediaItem {
         val mediaItem = MediaItem.Builder()
             .setUri(Uri.parse(clip.sourceUri))
+            // Media3 knipt in milliseconden, dit project rekent in microseconden.
+            // Dat is de enige plek waar precisie verloren gaat, en dat is niet te
+            // vermijden: `ClippingConfiguration` kent geen fijnere eenheid. Het
+            // beginpunt wordt naar beneden afgerond en het eindpunt naar boven,
+            // zodat er hooguit een beeld te véél in zit en nooit te weinig.
             .setClippingConfiguration(
                 MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(clip.inPointUs / 1_000)
-                    .setEndPositionMs(clip.outPointUs / 1_000)
+                    .setStartPositionMs(clip.inPointUs / US_PER_MS)
+                    .setEndPositionMs((clip.outPointUs + US_PER_MS - 1) / US_PER_MS)
                     .build(),
             )
             .build()
@@ -72,7 +79,6 @@ public class CompositionMapper(private val context: Context) {
 
                     is PlannedEffect.MaskedBlur -> add(
                         MaskedBlurEffect(
-                            context = context,
                             maskUri = Uri.parse(effect.maskUri),
                             radiusFrac = effect.radiusFrac,
                             clip = clip,
@@ -98,8 +104,26 @@ public class CompositionMapper(private val context: Context) {
         }
 
         return EditedMediaItem.Builder(mediaItem)
-            .setSpeed(clip.speed)
+            .setSpeed(speedProviderFor(clip.speed))
             .setEffects(Effects(/* audioProcessors= */ emptyList(), videoEffects))
             .build()
     }
+
+    /**
+     * `setSpeed` neemt geen getal maar een [SpeedProvider].
+     *
+     * Media3 staat een snelheidsverloop bínnen één clip toe en vraagt daarom per
+     * tijdstip om een waarde. Het projectmodel kent alleen een vaste snelheid per
+     * clip, dus dit is de hele vertaling. Bij snelheid 1 gaat de meegeleverde
+     * `DEFAULT` mee, zodat Media3 kan zien dat er niets te doen valt.
+     */
+    private fun speedProviderFor(speed: Float): SpeedProvider =
+        if (speed == 1f) {
+            SpeedProvider.DEFAULT
+        } else {
+            object : SpeedProvider {
+                override fun getSpeed(timeUs: Long): Float = speed
+                override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = C.TIME_UNSET
+            }
+        }
 }

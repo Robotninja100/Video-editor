@@ -20,15 +20,17 @@ import nl.artifation.videoeditor.model.PlannedClip
  */
 @UnstableApi
 internal class MaskedBlurEffect(
-    private val context: Context,
     private val maskUri: Uri,
     private val radiusFrac: Float,
     private val clip: PlannedClip,
 ) : GlEffect {
 
+    /**
+     * De `Context` komt van Media3 bij elke pas mee; er stond er ook een in de
+     * constructor, die nooit gebruikt werd omdat de parameter hem afdekte.
+     */
     override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram =
         MaskedBlurShaderProgram(
-            context = context,
             maskUri = maskUri,
             radiusFrac = radiusFrac,
             clip = clip,

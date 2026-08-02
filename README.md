@@ -70,10 +70,17 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 ./gradlew :app:installDebug        # met je S24 Ultra aangesloten
 ```
 
-De app-module is compleet: activity, state-houder, alle schermonderdelen,
-resources, thema en manifest. Reken er wel op dat de compiler dingen vindt —
-deze code is nooit door een compiler gegaan, alleen tegen de API-documentatie
-gecontroleerd.
+Wat je dan krijgt: de app vraagt bij het starten om een video, zet die als clip
+op de tijdlijn en speelt hem af met `CompositionPlayer` — precies het rondje dat
+fase 0 moet bewijzen. Monteren zelf (knippen, slepen, effecten) zit in het model
+en in de tijdlijn-UI, maar loopt nog niet door naar de export.
+
+Reken erop dat de compiler dingen vindt: deze code is nooit gecompileerd. Wel is
+elke Media3-aanroep nagelezen tegen de **bron van 1.10.1** in plaats van tegen
+het geheugen. Dat leverde twee echte fouten op die anders pas op het toestel
+waren opgevallen: `GlProgram(context, …)` leest shaders uit *assets* in plaats
+van uit een string, en `EditedMediaItem.Builder.setSpeed` neemt een
+`SpeedProvider`, geen getal.
 
 ## Ontwerpprincipes
 

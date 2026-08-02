@@ -1,6 +1,5 @@
 package nl.artifation.videoeditor.render
 
-import android.content.Context
 import android.net.Uri
 import android.opengl.GLES20
 import android.opengl.GLES30
@@ -29,7 +28,6 @@ import nl.artifation.videoeditor.model.sourcePtsFor
  */
 @UnstableApi
 internal class MaskedBlurShaderProgram(
-    context: Context,
     maskUri: Uri,
     private val radiusFrac: Float,
     /**
@@ -41,9 +39,18 @@ internal class MaskedBlurShaderProgram(
      */
     private val clip: PlannedClip,
     openDecoder: (Uri, Int) -> MaskVideoDecoder,
-) : BaseGlShaderProgram(/* useHdr= */ false, /* texturePoolCapacity= */ 1) {
+) : BaseGlShaderProgram(/* useHighPrecisionColorComponents= */ false, /* texturePoolCapacity= */ 1) {
 
-    private val program: GlProgram = GlProgram(context, VERTEX_SHADER, FRAGMENT_SHADER)
+    /**
+     * De constructor met twee argumenten neemt **GLSL-broncode**.
+     *
+     * Die met een `Context` erbij neemt twee *assetpaden* en leest ze van schijf.
+     * Die stond hier, met de shaderteksten als "pad", dus elke renderpas begon
+     * met een `IOException` op een bestandsnaam van duizend tekens. Het verschil
+     * is aan de aanroep niet te zien — beide zijn `String` — en de compiler
+     * merkt het niet omdat Kotlin de checked `IOException` niet afdwingt.
+     */
+    private val program: GlProgram = GlProgram(VERTEX_SHADER, FRAGMENT_SHADER)
     private val maskTextureId: Int = GlUtil.createExternalTexture()
 
     /**
@@ -96,6 +103,12 @@ internal class MaskedBlurShaderProgram(
             GlUtil.checkGlError()
         } catch (e: GlUtil.GlException) {
             throw VideoFrameProcessingException(e, presentationTimeUs)
+        } catch (e: RuntimeException) {
+            // De decoder hierboven is geen GL: een MediaCodec die omvalt gooit
+            // IllegalStateException. Die hoort ook als frameverwerkingsfout naar
+            // buiten te komen, zodat de export netjes faalt in plaats van de app
+            // mee te nemen.
+            throw VideoFrameProcessingException(e, presentationTimeUs)
         }
     }
 
@@ -145,20 +158,32 @@ internal class MaskedBlurShaderProgram(
             uniform float uAspect;
             varying vec2 vTex;
 
+            // Een echt 2D-kernel, 7x7 = 49 taps in één pas.
+            //
+            // Hiervoor stond hier een kruis: horizontale en verticale taps bij
+            // elkaar opgeteld in dezelfde som. Dat is geen benadering van een
+            // Gaussiaan maar een streepvormige vervaging, en juist bij een blur
+            // die een gezicht of een kenteken onherkenbaar moet maken zie je dat
+            // meteen — en werkt hij ook slechter.
+            //
+            // Echt separabel zou twee passen kosten en dus een tweede
+            // shaderprogramma. Op 1080p is 49 taps op een moderne telefoon-GPU
+            // goedkoop genoeg om dat niet waard te zijn.
             vec4 blur(vec2 uv) {
-              // 13-taps separabele benadering; radius in fractie van de breedte,
-              // zodat preview en export hetzelfde beeld geven.
               vec4 sum = vec4(0.0);
               float total = 0.0;
-              for (int i = -6; i <= 6; i++) {
-                float t = float(i) / 6.0 * uRadius;
-                float weight = 1.0 - abs(float(i)) / 7.0;
-                // Verticaal maal de beeldverhouding: uRadius is een fractie van
-                // de breedte, dus in UV-ruimte is dezelfde pixelafstand
-                // verticaal `uAspect` keer zo groot.
-                sum += texture2D(uSource, uv + vec2(t, 0.0)) * weight;
-                sum += texture2D(uSource, uv + vec2(0.0, t * uAspect)) * weight;
-                total += weight * 2.0;
+              for (int x = -3; x <= 3; x++) {
+                for (int y = -3; y <= 3; y++) {
+                  float dx = float(x) / 3.0 * uRadius;
+                  // Verticaal maal de beeldverhouding: uRadius is een fractie van
+                  // de frame*breedte*, dus dezelfde pixelafstand is in UV-ruimte
+                  // verticaal `uAspect` keer zo groot. Zonder dit is de blur op
+                  // 16:9 bijna twee keer zo breed als hoog.
+                  float dy = float(y) / 3.0 * uRadius * uAspect;
+                  float weight = (1.0 - abs(float(x)) / 4.0) * (1.0 - abs(float(y)) / 4.0);
+                  sum += texture2D(uSource, uv + vec2(dx, dy)) * weight;
+                  total += weight;
+                }
               }
               return sum / total;
             }

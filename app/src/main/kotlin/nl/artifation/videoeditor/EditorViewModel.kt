@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import nl.artifation.videoeditor.model.Clip
 import nl.artifation.videoeditor.model.Project
 import nl.artifation.videoeditor.model.Sequence
 import nl.artifation.videoeditor.model.TimelineGeometry
@@ -77,6 +78,32 @@ public class EditorViewModel(
         onZoom = ::zoom,
         onCancelAnalysis = { /* de wachtrij annuleert; zie AnalysisService */ },
     )
+
+    /**
+     * Zet een gekozen video als enige clip op de videotrack.
+     *
+     * Het minimum om iets te kunnen zien: één bron, hele lengte, geen effecten.
+     * Importeren, meerdere clips en de mediabibliotheek horen bij fase 1; dit is
+     * wat fase 0 nodig heeft om preview en export tegen elkaar te kunnen leggen.
+     */
+    public fun openClip(sourceUri: String, durationUs: Us) {
+        history.edit { huidig ->
+            val clip = Clip(
+                id = "clip-1",
+                sourceUri = sourceUri,
+                inPointUs = 0L,
+                outPointUs = durationUs.coerceAtLeast(1L),
+            )
+            huidig.copy(
+                sequences = huidig.sequences.mapIndexed { index, sequence ->
+                    if (index == 0) sequence.copy(items = listOf(clip)) else sequence
+                },
+            )
+        }
+        playheadUs = 0L
+        selectedClipId = "clip-1"
+        revisie++
+    }
 
     public fun undo() {
         history.undo()
