@@ -69,6 +69,8 @@ public class EditorViewModel(
             scrollPx = scrollPx,
             player = player,
             analysis = analysis,
+            canUndo = canUndo,
+            canRedo = canRedo,
         )
 
     public fun actions(): EditorActions = EditorActions(
@@ -77,6 +79,8 @@ public class EditorViewModel(
         onMove = ::verplaatsClip,
         onZoom = ::zoom,
         onCancelAnalysis = { /* de wachtrij annuleert; zie AnalysisService */ },
+        onUndo = ::undo,
+        onRedo = ::redo,
     )
 
     /**

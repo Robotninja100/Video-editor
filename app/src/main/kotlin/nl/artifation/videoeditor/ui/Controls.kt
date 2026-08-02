@@ -54,6 +54,11 @@ public fun Toolbar(
             )
         }
 
+        // Ongedaan maken hoort in de balk en niet in een menu: bij monteren is
+        // het de meest gebruikte handeling die er is.
+        HistorieKnop("↶", state.canUndo, actions.onUndo)
+        HistorieKnop("↷", state.canRedo, actions.onRedo)
+
         Text(
             text = "Exporteer",
             color = Color.White,
@@ -66,6 +71,30 @@ public fun Toolbar(
                 .padding(horizontal = Tokens.Space.L.dp, vertical = Tokens.Space.S.dp),
         )
     }
+}
+
+/**
+ * Een knop die uitgegrijsd is wanneer er niets te doen valt.
+ *
+ * Uitgrijzen en niet verbergen: een knop die verspringt maakt de balk
+ * onvoorspelbaar, en je duim leert de plek af.
+ */
+@Composable
+private fun HistorieKnop(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+    Text(
+        text = glyph,
+        color = if (enabled) {
+            Tokens.Palette.textPrimary.toColor()
+        } else {
+            Tokens.Palette.textTertiary.toColor()
+        },
+        fontSize = Tokens.Type.Headline.sizeSp.sp,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .size(Tokens.Layout.MIN_TOUCH_DP.dp)
+            .clip(RoundedCornerShape(Tokens.Radius.FULL.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+    )
 }
 
 /**

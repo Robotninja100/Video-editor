@@ -144,6 +144,8 @@ public data class EditorState(
      */
     val player: Player?,
     val analysis: AnalysisProgress?,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
 )
 
 public data class AnalysisProgress(
@@ -159,4 +161,6 @@ public data class EditorActions(
     val onMove: (sequenceIndex: Int, itemIndex: Int, targetStartUs: Us) -> Unit,
     val onZoom: (Float) -> Unit,
     val onCancelAnalysis: () -> Unit,
+    val onUndo: () -> Unit,
+    val onRedo: () -> Unit,
 )
