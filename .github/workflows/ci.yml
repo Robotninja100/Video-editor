@@ -227,6 +227,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
+    # TIJDELIJK: alleen nodig voor de release-stap onderaan, die er na één run
+    # weer uit gaat. Terugzetten naar de standaard (alleen lezen) hoort bij het
+    # verwijderen van die stap.
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -310,6 +316,33 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
           if-no-files-found: ignore
+
+      # TIJDELIJK, gaat er na één run weer uit.
+      #
+      # Een artefact is alleen te downloaden als je ingelogd bent en het komt als
+      # zip binnen — op een telefoon twee stappen te veel. Een release-asset is
+      # een directe link naar het .apk-bestand. Deze stap draait hier en niet
+      # lokaal omdat de omgeving waarin dit geschreven is de blob-opslag van
+      # GitHub niet mag benaderen (403 op organisatiebeleid), en de APK dus niet
+      # kan ophalen om zelf te uploaden.
+      - name: APK eenmalig als release publiceren
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          korte=$(git rev-parse --short HEAD)
+          gh release create "apk-$korte" \
+            app/build/outputs/apk/debug/app-debug.apk \
+            --prerelease \
+            --title "Testbuild $korte" \
+            --notes "Debug-build van commit $korte, rechtstreeks van de CI.
+
+          Niet ondertekend voor distributie en niet geoptimaliseerd — bedoeld om
+          op een toestel te testen, niet om te verspreiden. Android vraagt bij het
+          installeren eenmalig om 'installeren van onbekende apps toestaan'.
+
+          Wat werkt: de app vraagt bij het starten om een video, zet die op de
+          tijdlijn en speelt hem af. Wat nog niet bewezen is, staat in
+          docs/BOUWPLAN.md onder Verificatie — daar is een toestel voor nodig."
 
       - name: Build-log bewaren
         if: failure()
