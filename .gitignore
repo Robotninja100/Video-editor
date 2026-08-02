@@ -7,3 +7,4 @@ local.properties
 .kotlin/
 captures/
 .DS_Store
+build-logic/*/build/

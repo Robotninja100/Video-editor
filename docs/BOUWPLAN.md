@@ -6,9 +6,10 @@ De repo `robotninja100/video-editor` is leeg. Het bijgevoegde document beschrijf
 
 Doel na overleg aangescherpt:
 
-- **Toestel:** Samsung S24 Ultra (Snapdragon 8 Gen 3 for Galaxy) → QNN/NPU beschikbaar voor EdgeTAM.
+- **Toestel:** Samsung S24 Ultra (Snapdragon 8 Gen 3 for Galaxy).
 - **Ambitie:** een echte editor op expert-niveau — knippen, verplaatsen, effecten — plus auto tracking. Niet alleen een "lange video in → Shorts uit"-pipeline.
 - **Auto-blur:** volledige segmentatie met mask-video, zoals in §4.4 van het document. Bewust gekozen na afweging tegen goedkopere vormgebaseerde alternatieven.
+- **Externe AI mag.** Het zware modelwerk hoeft niet on-device. Zie *Analyse lokaal of in de cloud*; dat schrapt whisper.cpp-JNI en de QNN-integratie volledig.
 
 Het brondocument is technisch correct geverifieerd (Media3 1.10.1 stable, `CompositionPlayer` experimenteel, EdgeTAM-modelgroottes). Dit plan neemt de architectuur uit §2 en §3 over en corrigeert drie dingen: de fasevolgorde rond het grootste risico, het timeline-model voor "verplaatsen", en de aanname dat preview/export-pariteit gratis is.
 
@@ -70,8 +71,8 @@ Geen modelinferentie tijdens playback, ooit. Sidecars per bronclip (niet per tij
 :core-model     Project/Sequence/Clip/EffectSpec + kotlinx-serialization  (pure JVM, unittestbaar)
 :core-render    toComposition(), custom GlShaderProgram's, mask-decoder
 :core-analysis  stilte-DSP, scenedetectie, sidecar-IO                     (pure JVM waar mogelijk)
-:ml-whisper     whisper.cpp JNI
-:ml-tracking    EdgeTAM via QNN/LiteRT
+:core-remote    transcriptie (Groq), segmentatie (SAM 3), auto-edit (Claude)
+:ml-ondevice    optioneel later: lokale fallback voor transcriptie
 ```
 
 `:core-model` en `:core-analysis` als pure JVM-modules is de belangrijkste keuze hier — die zijn dan zonder emulator te testen.
@@ -140,7 +141,10 @@ class MaskedBlurShaderProgram(...) : BaseGlShaderProgram(false, 1) {
     }
 
     override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
-        advanceMaskTo(presentationTimeUs - clipInPointUs)  // timeline-PTS → bron-PTS
+        // Sidecars horen bij de bronclip, dus bij een getrimde clip moet de
+        // in-point erbíj. Of de effect-PTS bij 0 begint of de bron-timestamps
+        // houdt, is exact wat fase 0 moet vaststellen — het teken hangt eraan.
+        advanceMaskTo(presentationTimeUs + clipInPointUs)
         // bind inputTexId als uSource, maskTexId als uMask, teken
     }
 }
@@ -162,6 +166,61 @@ Aandachtspunten die fase 0 moet uitwijzen:
 
 ---
 
+## Analyse lokaal of in de cloud
+
+Het zware rekenwerk mag naar externe AI-diensten. Dat is precies de winst van de
+architectuur hierboven: de renderpipeline leest alleen sidecar-bestanden en heeft
+geen idee of die door de NPU of door een server zijn gemaakt. De keuze is dus per
+analysesoort te maken, en later te herzien, zonder de editor aan te raken.
+
+| Analyse | Waar | Waarom |
+|---|---|---|
+| Stiltes | **lokaal** | Pure DSP, milliseconden. Cloud zou alleen latency toevoegen. |
+| Scenedetectie | **lokaal** | Histogramverschil, triviaal. |
+| Reframe-detectie | **lokaal** | ML Kit is gratis en snel; de S24 Ultra doet dit moeiteloos. |
+| Transcriptie | **cloud** | `whisper-large-v3-turbo` via Groq: ~$0,0006/min. Fors nauwkeuriger dan `small` q5 lokaal, en het bespaart de hele JNI-bridge. |
+| Segmentatie / tracking | **cloud** | SAM 3 via fal.ai: $0,005 per 16 frames (~$0,31 per 1000 frames). Betere kwaliteit dan EdgeTAM en geen QNN-integratie nodig. |
+| Auto-edit | **cloud** | Was al de Claude API. |
+
+Implementatie: één interface per analysesoort in een aparte module `:core-remote`,
+met een lokale en een cloud-implementatie. De sidecar-formaten blijven identiek,
+zodat wisselen van backend geen enkel effect heeft op de rest.
+
+### Wat dit concreet oplevert
+
+- **whisper.cpp JNI vervalt.** Dat was twee weken; het wordt een HTTP-call. Het
+  echte werk in fase 3 was toch al de overlay-rendering, niet de transcriptie.
+- **EdgeTAM en de QNN-delegate vervallen.** Dat was het grootste risico in fase 6.
+- **Geen thermal throttling meer** bij lange clips — de reden waarom on-device
+  tracking van tien minuten materiaal pijnlijk werd.
+
+### Wat je ervoor terugkrijgt aan problemen
+
+- **Upload is de bottleneck, niet inferentie.** Stuur nooit het 4K-origineel.
+  Analyseer op een **proxy**: 540p voor segmentatie, en voor transcriptie alleen
+  een 16 kHz mono audiotrack. De masks komen terug op proxy-resolutie, wat prima
+  is — ze werden toch al op halve resolutie opgeslagen.
+- **Kosten schalen met framerate.** ~$0,56 per minuut op 30 fps is reëel. Track op
+  10 fps en interpoleer de masks ertussen: blur-randen zijn toch zacht, dus dat is
+  visueel gratis en scheelt een factor 3. Track bovendien alleen het fragment dat
+  geblurd moet worden, niet de hele video.
+- **Vraag de RLE-variant aan.** `sam-3/video-rle` geeft RLE-masks terug; die
+  encodeer je lokaal naar de grayscale masktrack. Scheelt bandbreedte en je houdt
+  de maskvideo in eigen hand.
+- **Privacy.** Auto-blur wordt vaak juist *voor* privacy gebruikt. Bedenk bewust
+  dat het ongeblurde materiaal dan bij een derde partij langskomt. Voor eigen
+  gebruik waarschijnlijk prima, maar het is een keuze, geen detail.
+- **Offline werkt niet meer** voor captions en tracking. Stiltes en reframe blijven
+  lokaal, dus de basis-editing blijft zonder netwerk bruikbaar.
+
+### Wat hier níet door verandert
+
+Fase 0 blijft ongewijzigd. Of de masks nu van EdgeTAM of van SAM 3 komen, de
+gesynchroniseerde mask-decoder in de shader is exact hetzelfde probleem. Die poort
+blijft dus staan.
+
+---
+
 ## Roadmap
 
 | Fase | Duur | Resultaat |
@@ -169,13 +228,14 @@ Aandachtspunten die fase 0 moet uitwijzen:
 | **0. Spike** | 1 week | Gradle-opzet + **twee** bewijzen: (a) pariteitsmeting export vs. preview via frame-hashes, (b) masked blur met handgemaakte maskvideo. **Go/no-go — niet verder zonder.** |
 | **1. Skelet** | 2–3 weken | Projectmodel, `toComposition()`, Compose-timeline met scrub/trim/split/**verplaatsen**/gaten, export. Unittests op `:core-model`. |
 | **2. Stiltes + audio** | 4 dagen | RMS-DSP, hysterese, WorkManager-analysepipeline, sidecar-IO, EBU R128-loudness. |
-| **3. Captions** | 2 weken | whisper.cpp JNI (`small` q5_1, batch), `OverlayEffect` met gecachete `BitmapOverlay` per cue, VAD-correctie tegen de stiltes uit fase 2. |
+| **3. Captions** | 1 week | Groq-transcriptie via `:core-remote`, `OverlayEffect` met gecachete `BitmapOverlay` per cue, VAD-correctie tegen de stiltes uit fase 2. |
 | **4. Auto-edit** | 1 week | Claude API, genummerd transcript in / **indices** uit, mapping naar clips. |
 | **5. Reframe** | 2 weken | ML Kit face+pose op 1 frame/200 ms, scenedetectie, Kalman/spring-smoothing, deadzone, crop-keyframes. |
-| **6. Tracking** | 3–4 weken | EdgeTAM via **QNN-delegate** (niet GPU), maskvideo-generatie, tap-to-select. Shader is al klaar uit fase 0. |
+| **6. Tracking** | 1,5–2 weken | SAM 3 via fal.ai, proxy-upload, RLE → maskvideo, tap-to-select. Shader is al klaar uit fase 0. |
 | **7. Afwerking** | doorlopend | Presets, thermal-chunking, snelheid. |
 
-**Totaal ≈ 14–17 weken part-time.** Iets boven de 12–15 uit het document, omdat fase 1 zwaarder is (verplaatsen/meerdere tracks) en fase 0 een week krijgt in plaats van 3–5 dagen.
+**Totaal ≈ 10–12 weken part-time**, tegen 14–17 met alles on-device. De winst zit
+volledig in fase 3 en 6: de twee fases waar het modelwerk zat.
 
 ### Waarom fase 5 vóór fase 6
 
@@ -201,6 +261,12 @@ Het brondocument noemt testen niet. De deterministische kern is triviaal te test
 2. **Masked blur.** Genereer met ffmpeg een grayscale maskvideo (bewegende witte cirkel op zwart) op halve resolutie, en een bronvideo. Verwacht resultaat: de cirkel is scherp, de rest geblurd, en de mask blijft synchroon over de volle duur — zowel in preview als in export, en óók op een getrimde clip (in-point ≠ 0).
 
 Falen op punt 2 betekent terug naar de tekentafel voor de maskopslag (RLE per frame, of vormgebaseerd). Daarom staat het in week 1 en niet in week 12.
+
+3. **De richting van de snelheidsomrekening.** `PlannedClip.sourcePtsFor` vermenigvuldigt de uitvoertijd met de snelheid en telt de in-point erbij. Of dat klopt hangt af van iets wat alleen op het toestel te zien is: krijgt `GlShaderProgram.drawFrame` een presentation timestamp van *vóór* of *ná* de snelheidsaanpassing? De functie staat in `:core-model` met tests eromheen, dus omdraaien is één regel — maar het moet wel gemeten worden, met een clip op 2× en een mask die zichtbaar meebeweegt.
+
+Hetzelfde geldt voor het teken van de in-point: sidecars horen bij de bronclip, dus `sourcePtsFor` telt de in-point **op**. Een getrimde clip met een mask laat meteen zien of dat klopt.
+
+**Wat er vóór het toestel al gecontroleerd is.** De Media3-aanroepen in `:core-render` zijn nagelezen tegen de bron van 1.10.1, niet tegen het geheugen. Twee fouten kwamen daar al uit — `GlProgram(context, …)` leest shaders uit assets, en `setSpeed` neemt een `SpeedProvider` en geen getal — en die hoeven dus geen toestel meer te kosten. Wat een compiler vindt, is daarmee niet gedekt: deze code is nooit gecompileerd.
 
 **Per fase daarna:** elke fase eindigt in iets dat op de S24 Ultra draait en zichtbaar werkt. Fase 2–5 leveren elk een sidecar die je met een debug-scherm kunt inspecteren voordat de UI eraan hangt.
 

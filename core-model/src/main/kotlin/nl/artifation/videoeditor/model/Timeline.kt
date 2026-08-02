@@ -157,7 +157,11 @@ public data class Sequence(
     /** Starttijd van elk item, in dezelfde volgorde als [items]. */
     public fun itemStartsUs(): List<Us> {
         var acc = 0L
-        return items.map { val start = acc; acc += it.durationUs; start }
+        return items.map { item ->
+            val start = acc
+            acc += item.durationUs
+            start
+        }
     }
 
     /** Het item dat [timelineUs] overlapt, plus de offset binnen dat item. */

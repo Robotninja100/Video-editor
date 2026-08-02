@@ -1,0 +1,140 @@
+package nl.artifation.videoeditor.project
+
+/**
+ * Wat er bij het openen van een project moet gebeuren.
+ *
+ * De beslissing is expres een waarde en geen actie: de aanroeper (UI) bepaalt
+ * of hij de gebruiker iets vraagt, en de logica blijft testbaar zonder opslag.
+ */
+public sealed interface RecoveryPlan {
+
+    /** Er staat niets van dit project op de opslag. */
+    public data class NotFound(val id: String) : RecoveryPlan
+
+    /** Alleen het goede bestand; gewoon openen. */
+    public data class OpenSaved(val saved: ProjectSummary) : RecoveryPlan
+
+    /**
+     * Er staat een nieuwere, leesbare autosave klaar: de app is waarschijnlijk
+     * gecrasht na de laatste bewuste opslag.
+     *
+     * [saved] is null als het goede bestand ontbreekt of zelf stuk is; dan is de
+     * autosave het enige wat er nog is.
+     */
+    public data class OfferAutosave(
+        val saved: ProjectSummary?,
+        val autosave: ProjectSummary,
+        val newerByMs: Long,
+    ) : RecoveryPlan
+
+    /** Het goede bestand openen en de autosave weggooien. */
+    public data class DiscardAutosave(
+        val saved: ProjectSummary,
+        val reason: DiscardReason,
+    ) : RecoveryPlan
+
+    /** Er is wel iets, maar niets ervan is te lezen. */
+    public data class Unrecoverable(val id: String, val detail: String) : RecoveryPlan {
+
+        /**
+         * Dezelfde uitkomst als fout, met een tekst voor de gebruiker erbij.
+         *
+         * [detail] is een ontwikkelaarstekst; een scherm dat die zou tonen, is
+         * precies waar `:core-errors` voor bestaat. Via deze fout komt de UI aan
+         * `userMessage` zonder de melding zelf te bedenken, en houdt
+         * [ProjectRepository.open] één bron voor wat er misging.
+         */
+        public fun asException(): CorruptProjectException =
+            CorruptProjectException("project '$id' is niet te openen: $detail")
+    }
+
+    public enum class DiscardReason {
+        /** Half weggeschreven of anderszins stuk — precies waar de MAIN-kopie voor is. */
+        AUTOSAVE_UNREADABLE,
+
+        /** De autosave is niet nieuwer dan het opgeslagen bestand. */
+        AUTOSAVE_NOT_NEWER,
+    }
+}
+
+/**
+ * Bepaalt bij het openen welk bestand gebruikt moet worden.
+ *
+ * Leidende regel: een autosave wordt pas serieus genomen als hij volledig te
+ * lezen is én nieuwer. Een half geschreven autosave verliest dus altijd van het
+ * opgeslagen bestand, en promoveren gebeurt pas ná die controle — zie
+ * [ProjectRepository.open].
+ */
+public object CrashRecovery {
+
+    /**
+     * @throws UnsupportedSchemaVersionException als een van beide bestanden uit
+     *   een nieuwere app komt. Dat is geen herstelbaar geval: terugvallen op een
+     *   ouder bestand zou de nieuwere versie stilzwijgend weggooien.
+     */
+    public fun inspect(store: ProjectStore, id: String): RecoveryPlan {
+        val savedText = store.readRaw(id, ProjectSlot.MAIN)
+        val autosaveText = store.readRaw(id, ProjectSlot.AUTOSAVE)
+        if (savedText == null && autosaveText == null) return RecoveryPlan.NotFound(id)
+
+        val saved = savedText?.let { summaryOrNull(it) }
+        val autosave = autosaveText?.let { summaryOrNull(it) }
+
+        if (autosave == null) {
+            return when {
+                saved != null && autosaveText == null -> RecoveryPlan.OpenSaved(saved)
+                saved != null -> RecoveryPlan.DiscardAutosave(
+                    saved,
+                    RecoveryPlan.DiscardReason.AUTOSAVE_UNREADABLE,
+                )
+
+                else -> RecoveryPlan.Unrecoverable(id, "geen enkel leesbaar bestand")
+            }
+        }
+
+        return when {
+            saved == null -> RecoveryPlan.OfferAutosave(null, autosave, newerByMs = 0L)
+
+            isNewer(autosave, saved) -> RecoveryPlan.OfferAutosave(
+                saved,
+                autosave,
+                newerByMs = autosave.lastModifiedMs - saved.lastModifiedMs,
+            )
+
+            else -> RecoveryPlan.DiscardAutosave(
+                saved,
+                RecoveryPlan.DiscardReason.AUTOSAVE_NOT_NEWER,
+            )
+        }
+    }
+
+    /**
+     * Of de autosave nieuwer is dan het opgeslagen bestand.
+     *
+     * Het volgnummer is leidend, want dat loopt alleen vooruit. De wandklok is
+     * dat niet: een NTP-correctie of tijdzone-update kan hem terugzetten, en dan
+     * lijkt het nieuwste werk ouder — waarna [ProjectRepository.open] het
+     * weggooit.
+     *
+     * Zijn de volgnummers gelijk — twee bestanden uit v3, of een echte
+     * gelijkstand — dan is de wijzigingstijd het enige aanknopingspunt dat er
+     * is. Zijn ook die gelijk, dan is de volgorde onbekend, en dan wint
+     * aanbieden van weggooien: weggooien is de onomkeerbare richting.
+     */
+    private fun isNewer(autosave: ProjectSummary, saved: ProjectSummary): Boolean = when {
+        autosave.revision != saved.revision -> autosave.revision > saved.revision
+        autosave.lastModifiedMs != saved.lastModifiedMs ->
+            autosave.lastModifiedMs > saved.lastModifiedMs
+
+        else -> true
+    }
+
+    private fun summaryOrNull(text: String): ProjectSummary? =
+        try {
+            ProjectCodec.decodeSummary(text)
+        } catch (ignored: CorruptProjectException) {
+            // Bewust genegeerd: hier telt alleen óf de kop leesbaar is. Wat er
+            // precies stuk was, komt bij het openen naar boven met een melding.
+            null
+        }
+}

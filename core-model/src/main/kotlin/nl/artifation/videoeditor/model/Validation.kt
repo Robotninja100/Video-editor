@@ -1,3 +1,7 @@
+// Het bestand heet naar wat het doet, niet naar het enige type dat het bevat:
+// `validate()` is de reden dat het bestaat, `Problem` is er de uitkomst van.
+@file:Suppress("MatchingDeclarationName")
+
 package nl.artifation.videoeditor.model
 
 /**

@@ -26,9 +26,9 @@ public data class SilenceInterval(
 public data class SilenceConfig(
     val windowMs: Int = 20,
     /** Stilte begint zodra het niveau hieronder zakt. */
-    val enterDb: Float = -45f,
+    val enterDb: Float = DEFAULT_ENTER_DB,
     /** Stilte eindigt pas zodra het niveau hierboven komt. Hoger dan [enterDb] — dat is de hysterese. */
-    val exitDb: Float = -40f,
+    val exitDb: Float = DEFAULT_EXIT_DB,
     /** Kortere stiltes worden genegeerd; anders knip je midden in adempauzes. */
     val minSilenceMs: Int = 300,
     /** Stiltes worden aan beide kanten ingekort, zodat spraak niet wordt afgekapt. */
@@ -40,12 +40,25 @@ public data class SilenceConfig(
         require(minSilenceMs >= 0) { "minSilenceMs moet >= 0 zijn" }
         require(paddingMs >= 0) { "paddingMs moet >= 0 zijn" }
     }
+
+    public companion object {
+        /**
+         * De drempels zijn empirisch: -45 dB laat kamerruis en ademhaling nog
+         * als stilte doorgaan, -40 dB voorkomt dat een zachte inzet de stilte
+         * meteen weer opent. Vijf dB ertussen is de hysterese.
+         */
+        public const val DEFAULT_ENTER_DB: Float = -45f
+        public const val DEFAULT_EXIT_DB: Float = -40f
+    }
 }
 
 public object SilenceDetector {
 
     /** Ondergrens voor de dB-schaal, zodat digitale stilte geen -Infinity oplevert. */
     private const val FLOOR_DB = -100f
+
+    /** Amplitude in dB is 20·log10. */
+    private const val DB_PER_AMPLITUDE_DECADE = 20f
 
     /**
      * @param mono mono samples in [-1, 1]
@@ -150,7 +163,7 @@ public object SilenceDetector {
         if (count <= 0) 0f else (sum / count).toFloat()
 
     private fun toDb(rms: Float): Float =
-        if (rms <= 0f) FLOOR_DB else max(FLOOR_DB, 20f * log10(rms))
+        if (rms <= 0f) FLOOR_DB else max(FLOOR_DB, DB_PER_AMPLITUDE_DECADE * log10(rms))
 }
 
 /** Mixt interleaved samples naar mono. */

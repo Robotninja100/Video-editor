@@ -1,0 +1,45 @@
+# Beschrijft de stijl die de code al heeft, zodat editors, ktlint en detekt
+# het onderling eens zijn. Gemeten aan de bestaande broncode: vier spaties,
+# geen tabs, regels tot ongeveer 120 tekens en overal afsluitende komma's.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{kt,kts}]
+max_line_length = 120
+
+# Officiële Kotlin-stijl, met afsluitende komma's — die staan al door de hele
+# codebase (ruim 1500 stuks) en houden diffs klein.
+ij_kotlin_code_style_defaults = KOTLIN_OFFICIAL
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+
+# Bewust `intellij_idea` en niet `ktlint_official`: die laatste herschikt onder
+# meer de plaatsing van functiehandtekeningen en zou de hele codebase in de
+# basislijn duwen zonder dat er iets leesbaarder van wordt.
+ktlint_code_style = intellij_idea
+
+# Testnamen zijn hier Nederlandse zinnen tussen backticks. Dat is opzet en geen
+# stijlfout, dus de naamgevingsregel kijkt niet naar @Test-functies.
+ktlint_function_naming_ignore_when_annotated_with = Test, ParameterizedTest, RepeatedTest, TestFactory
+
+# Deze twee regels herschikken bestaande, leesbare code zonder dat er iets
+# beter van wordt; ze zouden de hele codebase in de basislijn duwen.
+ktlint_standard_multiline-expression-wrapping = disabled
+ktlint_standard_string-template-indent = disabled
+
+[*.{yml,yaml,json,toml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[gradlew.bat]
+end_of_line = crlf
