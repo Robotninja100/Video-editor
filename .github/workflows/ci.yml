@@ -113,9 +113,9 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      # De Android-modules staan bewust niet in settings.gradle.kts en worden
-      # hier dus niet gebouwd. Zodra ze aan staan hoort daar een derde job bij
-      # met een Android SDK; zie docs/BOUWPLAN.md.
+      # De Android-modules doen hier niet mee: settings.gradle.kts neemt ze
+      # alleen op als er een local.properties met sdk.dir staat, en die schrijft
+      # alleen de apk-job hieronder. Deze job blijft dus pure JVM.
       #
       # `:koverXmlReport` mét dubbele punt is het samengevoegde rapport van het
       # hoofdproject; zonder die punt zou elke module ook nog zijn eigen rapport
@@ -215,5 +215,100 @@ jobs:
             */build/reports/tests/test
             */build/test-results/test
             build/reports/kover
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # De derde job, en de enige die een Android SDK nodig heeft. Deze omgeving kan
+  # `dl.google.com` niet bereiken, dus dit is de plek waar de Android-code voor
+  # het eerst langs een compiler gaat. Verwacht dat hier fouten uit komen die de
+  # andere twee jobs per definitie niet kunnen zien.
+  apk:
+    name: Android-build (APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Zorgt voor cmdline-tools en geaccepteerde licenties; AGP haalt daarna
+      # zelf het platform en de build-tools op die app/build.gradle.kts vraagt.
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # Dít zet de Android-modules aan. Zie settings.gradle.kts: zonder sdk.dir
+      # doen ze niet mee, zodat een machine zonder SDK de rest gewoon kan bouwen.
+      - name: Android-modules aanzetten
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: APK bouwen
+        run: set -o pipefail && ./gradlew :app:assembleDebug 2>&1 | tee build.log
+
+      # Kotlin-fouten staan verspreid door duizenden regels Gradle-uitvoer. Deze
+      # samenvatting zet ze op één plek, zodat een ronde reparaties beginnen kan
+      # bij lezen in plaats van bij zoeken.
+      - name: Samenvatting compileerfouten
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import os, re, collections
+
+          if not os.path.exists('build.log'):
+              print('## Android-build\n\nGeen build-log gevonden.')
+              raise SystemExit
+
+          tekst = open('build.log', errors='replace').read()
+          # Kotlin: `e: file:///pad/Bestand.kt:12:5 melding`
+          kotlin = re.findall(r'^e: file://(\S+?):(\d+):(\d+) (.*)$', tekst, re.MULTILINE)
+          # AGP/AAPT en overige harde fouten.
+          overig = [r for r in re.findall(r'^(?:ERROR|FAILURE):? (.*)$', tekst, re.MULTILINE)]
+
+          print('## Android-build\n')
+          if not kotlin and not overig:
+              print('Geen compileerfouten gevonden.')
+          else:
+              if kotlin:
+                  print(f'**{len(kotlin)} Kotlin-fout(en)**, verdeeld over de bestanden:\n')
+                  print('| Bestand | Aantal |')
+                  print('| --- | ---: |')
+                  teller = collections.Counter(os.path.relpath(p, os.getcwd()) if os.path.isabs(p)
+                                               else p for p, _, _, _ in kotlin)
+                  for naam, aantal in teller.most_common():
+                      print(f'| `{naam}` | {aantal} |')
+                  print('\n| Plek | Melding |')
+                  print('| --- | --- |')
+                  for pad, lijn, kolom, melding in kotlin[:200]:
+                      naam = os.path.relpath(pad, os.getcwd()) if os.path.isabs(pad) else pad
+                      print(f"| `{naam}:{lijn}:{kolom}` | {melding.replace('|', chr(92) + '|')[:200]} |")
+              if overig:
+                  print('\n### Overige fouten\n')
+                  for regel in overig[:30]:
+                      print(f"- {regel.replace('|', chr(92) + '|')[:250]}")
+          PY
+
+      - name: APK bewaren
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Build-log bewaren
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-log
+          path: build.log
           retention-days: 7
           if-no-files-found: ignore
