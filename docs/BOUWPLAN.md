@@ -262,6 +262,12 @@ Het brondocument noemt testen niet. De deterministische kern is triviaal te test
 
 Falen op punt 2 betekent terug naar de tekentafel voor de maskopslag (RLE per frame, of vormgebaseerd). Daarom staat het in week 1 en niet in week 12.
 
+3. **De richting van de snelheidsomrekening.** `PlannedClip.sourcePtsFor` vermenigvuldigt de uitvoertijd met de snelheid en telt de in-point erbij. Of dat klopt hangt af van iets wat alleen op het toestel te zien is: krijgt `GlShaderProgram.drawFrame` een presentation timestamp van *vóór* of *ná* de snelheidsaanpassing? De functie staat in `:core-model` met tests eromheen, dus omdraaien is één regel — maar het moet wel gemeten worden, met een clip op 2× en een mask die zichtbaar meebeweegt.
+
+Hetzelfde geldt voor het teken van de in-point: sidecars horen bij de bronclip, dus `sourcePtsFor` telt de in-point **op**. Een getrimde clip met een mask laat meteen zien of dat klopt.
+
+**Wat er vóór het toestel al gecontroleerd is.** De Media3-aanroepen in `:core-render` zijn nagelezen tegen de bron van 1.10.1, niet tegen het geheugen. Twee fouten kwamen daar al uit — `GlProgram(context, …)` leest shaders uit assets, en `setSpeed` neemt een `SpeedProvider` en geen getal — en die hoeven dus geen toestel meer te kosten. Wat een compiler vindt, is daarmee niet gedekt: deze code is nooit gecompileerd.
+
 **Per fase daarna:** elke fase eindigt in iets dat op de S24 Ultra draait en zichtbaar werkt. Fase 2–5 leveren elk een sidecar die je met een debug-scherm kunt inspecteren voordat de UI eraan hangt.
 
 **Draaien:** `./gradlew :app:installDebug` op het aangesloten toestel; `./gradlew test` voor de JVM-modules.
