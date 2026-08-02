@@ -64,15 +64,29 @@ class CrashRecoveryTest {
         )
     }
 
+    /**
+     * Deze test legde eerder het omgekeerde vast: bij gelijke tijden werd de
+     * autosave weggegooid. Maar gelijk volgnummer én gelijke tijd betekent dat de
+     * volgorde onbekend is, en dan is weggooien de onomkeerbare richting. De
+     * gebruiker hoort te kiezen.
+     */
     @Test
-    fun `een even oude autosave voegt niets toe`() {
+    fun `bij een onbekende volgorde wordt de keuze voorgelegd`() {
         store.save(voorbeeldBestand(lastModifiedMs = 5_000L))
         store.save(voorbeeldBestand(lastModifiedMs = 5_000L), ProjectSlot.AUTOSAVE)
 
-        assertIs<RecoveryPlan.DiscardAutosave>(
+        assertIs<RecoveryPlan.OfferAutosave>(
             CrashRecovery.inspect(store, "p1"),
-            "gelijke tijden zijn geen reden om te herstellen",
+            "onbekende volgorde mag geen stilzwijgende verwijdering opleveren",
         )
+    }
+
+    @Test
+    fun `een oudere autosave wordt nog steeds weggegooid`() {
+        store.save(voorbeeldBestand(lastModifiedMs = 5_000L))
+        store.save(voorbeeldBestand(lastModifiedMs = 1_000L), ProjectSlot.AUTOSAVE)
+
+        assertIs<RecoveryPlan.DiscardAutosave>(CrashRecovery.inspect(store, "p1"))
     }
 
     @Test
@@ -143,5 +157,63 @@ class CrashRecoveryTest {
         store.save(voorbeeldBestand(lastModifiedMs = 9_000L), ProjectSlot.AUTOSAVE)
 
         assertFailsWith<UnsupportedSchemaVersionException> { CrashRecovery.inspect(store, "p1") }
+    }
+}
+
+/**
+ * Het volgnummer bestaat omdat de wandklok op een telefoon geen betrouwbare
+ * volgorde geeft: een NTP-correctie of tijdzone-update kan hem terugzetten.
+ */
+class VolgnummerOrdeningTest {
+
+    private val store = InMemoryProjectStore()
+
+    private fun bestand(revision: Long, lastModifiedMs: Long) = ProjectFile.of(
+        project = voorbeeldProject(),
+        name = "Vakantie",
+        lastModifiedMs = lastModifiedMs,
+        revision = revision,
+    )
+
+    @Test
+    fun `een hoger volgnummer wint van een latere klok`() {
+        // De klok is 30 seconden teruggezet nadat het hoofdbestand werd opgeslagen.
+        store.save(bestand(revision = 4, lastModifiedMs = 1_700_000_000_000L))
+        store.save(bestand(revision = 5, lastModifiedMs = 1_699_999_970_000L), ProjectSlot.AUTOSAVE)
+
+        assertIs<RecoveryPlan.OfferAutosave>(
+            CrashRecovery.inspect(store, "p1"),
+            "het nieuwste werk mag niet sneuvelen door een klokcorrectie",
+        )
+    }
+
+    @Test
+    fun `een lager volgnummer verliest ook bij een latere klok`() {
+        store.save(bestand(revision = 9, lastModifiedMs = 1_000L))
+        store.save(bestand(revision = 8, lastModifiedMs = 9_000L), ProjectSlot.AUTOSAVE)
+
+        assertIs<RecoveryPlan.DiscardAutosave>(CrashRecovery.inspect(store, "p1"))
+    }
+
+    @Test
+    fun `bij gelijke volgnummers beslist de klok alsnog`() {
+        store.save(bestand(revision = 3, lastModifiedMs = 1_000L))
+        store.save(bestand(revision = 3, lastModifiedMs = 9_000L), ProjectSlot.AUTOSAVE)
+
+        assertIs<RecoveryPlan.OfferAutosave>(
+            CrashRecovery.inspect(store, "p1"),
+            "bestanden uit v3 hebben geen volgnummer; dan is de klok wat er is",
+        )
+    }
+
+    @Test
+    fun `opslaan hoogt het volgnummer op`() {
+        val eerste = ProjectFile.of(voorbeeldProject(), "Vakantie", lastModifiedMs = 0L)
+        val tweede = eerste.withProject(voorbeeldProject(), nowMs = 1_000L)
+        val derde = tweede.renamed("Andere naam", nowMs = 2_000L)
+
+        assertEquals(0L, eerste.summary.revision)
+        assertEquals(1L, tweede.summary.revision)
+        assertEquals(2L, derde.summary.revision, "hernoemen is ook een schrijfactie")
     }
 }

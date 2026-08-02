@@ -47,9 +47,24 @@ public interface ProjectStore {
         writeRaw(file.project.id, slot, ProjectCodec.encode(file))
     }
 
+    /**
+     * Leest een slot en controleert dat het bestand ook echt bij [id] hoort.
+     *
+     * Zonder die controle kan een bestand dat op de verkeerde plek staat — een
+     * gekopieerde projectmap, een teruggezette backup — via [save] onder zijn
+     * *eigen* id worden weggeschreven en zo een ander project overschrijven.
+     * Het slot en de inhoud horen dezelfde id te dragen; wijken ze af, dan is
+     * het bestand inconsistent.
+     */
     public fun load(id: String, slot: ProjectSlot = ProjectSlot.MAIN): ProjectFile {
         val text = readRaw(id, slot) ?: throw ProjectNotFoundException(id)
-        return ProjectCodec.decode(text)
+        val file = ProjectCodec.decode(text)
+        if (file.project.id != id) {
+            throw CorruptProjectException(
+                "bestand onder '$id' ($slot) bevat project '${file.project.id}'",
+            )
+        }
+        return file
     }
 
     /**

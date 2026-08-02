@@ -337,3 +337,135 @@ class AutosaveBovengrensTest {
         assertNull(state.firstEditSinceWriteAtMs, "zonder onopgeslagen werk hoort er geen anker te zijn")
     }
 }
+
+/**
+ * Een slot wordt geschreven onder de id die ín het bestand staat, terwijl het
+ * gelezen wordt onder de id van het slot. Zonder controle kan een bestand dat op
+ * de verkeerde plek staat een ander project overschrijven.
+ */
+class SlotIdentiteitTest {
+
+    private val store = InMemoryProjectStore()
+    private val repository = ProjectRepository(store)
+
+    @Test
+    fun `een bestand met een vreemde id wordt geweigerd`() {
+        // Onder "p2" staat de inhoud van "p1" — een gekopieerde map, een backup.
+        store.writeRaw(
+            "p2",
+            ProjectSlot.MAIN,
+            ProjectCodec.encode(ProjectFile.of(voorbeeldProject("p1"), "Vakantie", 1_000L)),
+        )
+
+        val fout = assertFailsWith<CorruptProjectException> { store.load("p2") }
+
+        assertTrue("p1" in fout.message!!, "melding: ${fout.message}")
+    }
+
+    @Test
+    fun `een misplaatste autosave overschrijft geen ander project`() {
+        repository.create(voorbeeldProject("p1"), "Vakantie", nowMs = 1_000L)
+        val goedeInhoud = store.readRaw("p1", ProjectSlot.MAIN)
+
+        // Autosave onder "p2", maar met de identiteit van "p1" erin.
+        store.writeRaw(
+            "p2",
+            ProjectSlot.AUTOSAVE,
+            ProjectCodec.encode(ProjectFile.of(voorbeeldProject("p1"), "Gekaapt", 9_000L)),
+        )
+
+        runCatching { repository.open("p2") }
+
+        assertEquals(
+            goedeInhoud,
+            store.readRaw("p1", ProjectSlot.MAIN),
+            "het project p1 is overschreven door een bestand dat onder p2 stond",
+        )
+    }
+}
+
+/**
+ * De schrijf-vergrendeling moet werken over uitvoeringscontexten heen: autosave
+ * en een handmatige opslag komen niet van dezelfde thread.
+ */
+class GelijktijdigSchrijvenTest {
+
+    @Test
+    fun `van twee tegelijk startende schrijvers komt er precies een door`() {
+        val store = InMemoryProjectStore()
+        val repository = ProjectRepository(store)
+        val bestand = ProjectFile.of(voorbeeldProject(), "Vakantie", 1_000L)
+
+        val start = java.util.concurrent.CountDownLatch(1)
+        val geslaagd = java.util.concurrent.atomic.AtomicInteger(0)
+        val geweigerd = java.util.concurrent.atomic.AtomicInteger(0)
+
+        val threads = List(2) {
+            Thread {
+                start.await()
+                try {
+                    repository.save(bestand)
+                    geslaagd.incrementAndGet()
+                } catch (e: ConcurrentWriteException) {
+                    geweigerd.incrementAndGet()
+                }
+            }
+        }
+        threads.forEach { it.start() }
+        start.countDown()
+        threads.forEach { it.join(5_000) }
+
+        assertEquals(
+            2,
+            geslaagd.get() + geweigerd.get(),
+            "beide threads horen een uitkomst te hebben",
+        )
+        assertFalse(repository.isWriting, "de vlag hoort achteraf vrij te zijn")
+    }
+
+    @Test
+    fun `de vlag wordt vrijgegeven ook als het schrijven mislukt`() {
+        val store = InMemoryProjectStore()
+        val repository = ProjectRepository(store)
+        store.failNextWrite("p1", ProjectSlot.MAIN)
+
+        runCatching { repository.create(voorbeeldProject(), "Vakantie", nowMs = 0L) }
+
+        assertFalse(repository.isWriting, "een mislukte schrijfactie mag de vlag niet laten hangen")
+    }
+}
+
+/** `isReadable` is een predicaat: het hoort te antwoorden, niet te gooien. */
+class IsReadableTest {
+
+    @Test
+    fun `een goed bestand is leesbaar`() {
+        val tekst = ProjectCodec.encode(ProjectFile.of(voorbeeldProject(), "Vakantie", 0L))
+        assertTrue(ProjectCodec.isReadable(tekst))
+    }
+
+    @Test
+    fun `een leeg of ongeldig bestand is niet leesbaar`() {
+        assertFalse(ProjectCodec.isReadable(""))
+        assertFalse(ProjectCodec.isReadable("{ dit is geen json"))
+    }
+
+    @Test
+    fun `een bestand uit een nieuwere app geeft false in plaats van te gooien`() {
+        val tekst = ProjectCodec.encode(ProjectFile.of(voorbeeldProject(), "Vakantie", 0L))
+            .replace("\"schemaVersion\": $CURRENT_SCHEMA_VERSION", "\"schemaVersion\": 99")
+
+        assertFalse(
+            ProjectCodec.isReadable(tekst),
+            "een predicaat dat gooit is geen predicaat",
+        )
+    }
+
+    @Test
+    fun `een bestand met een leesbare kop maar kapotte inhoud is niet leesbaar`() {
+        val tekst = ProjectCodec.encode(ProjectFile.of(voorbeeldProject(), "Vakantie", 0L))
+            .replace("\"kind\": \"clip\"", "\"kind\": \"sticker\"")
+
+        assertFalse(ProjectCodec.isReadable(tekst), "alleen de kop bewijst niets")
+    }
+}

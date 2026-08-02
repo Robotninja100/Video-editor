@@ -127,6 +127,32 @@ public object MigrationV2ToV3 : SchemaMigration {
             ?.get("sourceUri") as? JsonPrimitive
 }
 
+/**
+ * v3 → v4: het volgnummer erbij.
+ *
+ * Bestaande bestanden krijgen 0. Herstel valt voor die bestanden terug op de
+ * wijzigingstijd — meer valt er over hun onderlinge volgorde ook niet te weten.
+ */
+public object MigrationV3ToV4 : SchemaMigration {
+
+    override val fromVersion: Int = 3
+    override val toVersion: Int = 4
+
+    override fun migrate(document: JsonObject): JsonObject {
+        val summary = document["summary"] as? JsonObject
+            ?: throw CorruptProjectException("v3-project zonder kop")
+
+        return buildJsonObject {
+            for ((key, value) in document) put(key, value)
+            put("schemaVersion", toVersion)
+            putJsonObject("summary") {
+                for ((key, value) in summary) put(key, value)
+                put("revision", 0L)
+            }
+        }
+    }
+}
+
 private fun sequencesOf(project: JsonObject): List<JsonObject> =
     (project["sequences"] as? JsonArray).orEmptyObjects()
 
@@ -142,7 +168,7 @@ private fun JsonArray?.orEmptyObjects(): List<JsonObject> =
  */
 public object SchemaMigrations {
 
-    public val ALL: List<SchemaMigration> = listOf(MigrationV1ToV2, MigrationV2ToV3)
+    public val ALL: List<SchemaMigration> = listOf(MigrationV1ToV2, MigrationV2ToV3, MigrationV3ToV4)
 
     private val byFromVersion: Map<Int, SchemaMigration> = ALL.associateBy { it.fromVersion }
 

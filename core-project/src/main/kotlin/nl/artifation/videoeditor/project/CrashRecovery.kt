@@ -94,7 +94,8 @@ public object CrashRecovery {
 
         return when {
             saved == null -> RecoveryPlan.OfferAutosave(null, autosave, newerByMs = 0L)
-            autosave.lastModifiedMs > saved.lastModifiedMs -> RecoveryPlan.OfferAutosave(
+
+            isNewer(autosave, saved) -> RecoveryPlan.OfferAutosave(
                 saved,
                 autosave,
                 newerByMs = autosave.lastModifiedMs - saved.lastModifiedMs,
@@ -105,6 +106,27 @@ public object CrashRecovery {
                 RecoveryPlan.DiscardReason.AUTOSAVE_NOT_NEWER,
             )
         }
+    }
+
+    /**
+     * Of de autosave nieuwer is dan het opgeslagen bestand.
+     *
+     * Het volgnummer is leidend, want dat loopt alleen vooruit. De wandklok is
+     * dat niet: een NTP-correctie of tijdzone-update kan hem terugzetten, en dan
+     * lijkt het nieuwste werk ouder — waarna [ProjectRepository.open] het
+     * weggooit.
+     *
+     * Zijn de volgnummers gelijk — twee bestanden uit v3, of een echte
+     * gelijkstand — dan is de wijzigingstijd het enige aanknopingspunt dat er
+     * is. Zijn ook die gelijk, dan is de volgorde onbekend, en dan wint
+     * aanbieden van weggooien: weggooien is de onomkeerbare richting.
+     */
+    private fun isNewer(autosave: ProjectSummary, saved: ProjectSummary): Boolean = when {
+        autosave.revision != saved.revision -> autosave.revision > saved.revision
+        autosave.lastModifiedMs != saved.lastModifiedMs ->
+            autosave.lastModifiedMs > saved.lastModifiedMs
+
+        else -> true
     }
 
     private fun summaryOrNull(text: String): ProjectSummary? =

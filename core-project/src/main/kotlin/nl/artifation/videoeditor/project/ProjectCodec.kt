@@ -63,12 +63,24 @@ public object ProjectCodec {
     /** Versie van het bestand zoals het op schijf staat, vóór migratie. */
     public fun versionOf(text: String): Int = SchemaMigrations.versionOf(parse(text))
 
-    /** Of de tekst als project te openen is; gebruikt door de herstelbeslissing. */
+    /**
+     * Of de tekst daadwerkelijk als project te openen is.
+     *
+     * Bewust de volledige [decode] en niet alleen de kop: een bestand waarvan de
+     * kop decodeert maar de inhoud niet, is niet te openen — en die aanname
+     * kostte eerder al bijna de enige leesbare kopie van een project.
+     *
+     * Vangt [ProjectException] in zijn geheel af. Alleen `CorruptProjectException`
+     * afvangen liet een bestand uit een nieuwere app doorgooien, terwijl dit een
+     * predicaat is dat hoort te antwoorden in plaats van te gooien.
+     */
     public fun isReadable(text: String): Boolean =
         try {
-            decodeSummary(text)
+            decode(text)
             true
-        } catch (e: CorruptProjectException) {
+        } catch (ignored: ProjectException) {
+            // Bewust genegeerd: dit is een predicaat. Wie de reden wil weten,
+            // roept `decode` aan en vangt de fout zelf af.
             false
         }
 

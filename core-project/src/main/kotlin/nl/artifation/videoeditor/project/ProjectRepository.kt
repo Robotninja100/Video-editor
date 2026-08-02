@@ -1,6 +1,7 @@
 package nl.artifation.videoeditor.project
 
 import nl.artifation.videoeditor.model.Project
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * De projectlaag zoals de app hem gebruikt: openen met herstel, opslaan,
@@ -12,10 +13,19 @@ public class ProjectRepository(
     private val store: ProjectStore,
 ) {
 
-    private var busyWithId: String? = null
+    /**
+     * Wie er op dit moment schrijft, of null.
+     *
+     * Atomair en niet een gewone `var`: autosave en een handmatige opslag komen
+     * uit verschillende uitvoeringscontexten — dat staat ook in de documentatie
+     * van [ConcurrentWriteException]. Met lezen-dan-schrijven zien twee
+     * schrijvers allebei null, gaan ze allebei door, en zet de eerste die klaar
+     * is de vlag terug terwijl de ander nog bezig is.
+     */
+    private val busyWithId = AtomicReference<String?>(null)
 
     /** Of er op dit moment een schrijfactie loopt; voedt [AutosaveState.writeInProgress]. */
-    public val isWriting: Boolean get() = busyWithId != null
+    public val isWriting: Boolean get() = busyWithId.get() != null
 
     public fun list(): List<ProjectSummary> = store.summaries()
 
@@ -141,13 +151,15 @@ public class ProjectRepository(
     }
 
     private fun <T> exclusively(id: String, block: () -> T): T {
-        val busy = busyWithId
-        if (busy != null) throw ConcurrentWriteException(id, busy)
-        busyWithId = id
+        if (!busyWithId.compareAndSet(null, id)) {
+            throw ConcurrentWriteException(id, busyWithId.get() ?: id)
+        }
         try {
             return block()
         } finally {
-            busyWithId = null
+            // Alleen de eigen claim vrijgeven: een late `finally` mag nooit de
+            // claim van een volgende schrijver wissen.
+            busyWithId.compareAndSet(id, null)
         }
     }
 }

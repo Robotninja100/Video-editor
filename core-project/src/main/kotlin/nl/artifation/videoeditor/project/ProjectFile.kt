@@ -11,7 +11,7 @@ import nl.artifation.videoeditor.model.Us
  * Verhogen zodra het formaat verandert, met een bijbehorende migratie in
  * [SchemaMigrations.ALL]. De ketentest bewaakt dat je dat niet vergeet.
  */
-public const val CURRENT_SCHEMA_VERSION: Int = 3
+public const val CURRENT_SCHEMA_VERSION: Int = 4
 
 /** Oudste versie die nog opgetild kan worden naar [CURRENT_SCHEMA_VERSION]. */
 public const val OLDEST_SUPPORTED_SCHEMA_VERSION: Int = 1
@@ -33,6 +33,15 @@ public data class ProjectSummary(
     val clipCount: Int,
     /** Sleutel in de framecache; null zolang er nog geen frame gerenderd is. */
     val thumbnailKey: String? = null,
+    /**
+     * Monotoon volgnummer, opgehoogd bij elke schrijfactie.
+     *
+     * Dit bepaalt welke van twee bestanden nieuwer is. De wandklok kan dat niet:
+     * een NTP-correctie, een tijdzone-update of een handmatige aanpassing zet de
+     * klok terug, en dan lijkt het nieuwste werk ouder — waarna herstel het
+     * weggooit. Een teller loopt alleen vooruit.
+     */
+    val revision: Long = 0L,
 )
 
 /**
@@ -56,11 +65,17 @@ public data class ProjectFile(
 
     /** Zelfde project, andere naam; werkt meteen de wijzigingstijd bij. */
     public fun renamed(name: String, nowMs: Long): ProjectFile =
-        copy(summary = summary.copy(name = name, lastModifiedMs = nowMs))
+        copy(
+            summary = summary.copy(
+                name = name,
+                lastModifiedMs = nowMs,
+                revision = summary.revision + 1,
+            ),
+        )
 
     /** Legt een bewerkt project vast; de afgeleide velden in de kop gaan mee. */
     public fun withProject(project: Project, nowMs: Long): ProjectFile =
-        of(project, summary.name, nowMs, summary.thumbnailKey)
+        of(project, summary.name, nowMs, summary.thumbnailKey, summary.revision + 1)
 
     public fun withThumbnail(thumbnailKey: String?): ProjectFile =
         copy(summary = summary.copy(thumbnailKey = thumbnailKey))
@@ -72,9 +87,10 @@ public data class ProjectFile(
             name: String,
             lastModifiedMs: Long,
             thumbnailKey: String? = null,
+            revision: Long = 0L,
         ): ProjectFile = ProjectFile(
             schemaVersion = CURRENT_SCHEMA_VERSION,
-            summary = summaryOf(project, name, lastModifiedMs, thumbnailKey),
+            summary = summaryOf(project, name, lastModifiedMs, thumbnailKey, revision),
             project = project,
         )
 
@@ -83,6 +99,7 @@ public data class ProjectFile(
             name: String,
             lastModifiedMs: Long,
             thumbnailKey: String? = null,
+            revision: Long = 0L,
         ): ProjectSummary = ProjectSummary(
             id = project.id,
             name = name,
@@ -90,6 +107,7 @@ public data class ProjectFile(
             durationUs = project.durationUs,
             clipCount = project.clipCount(),
             thumbnailKey = thumbnailKey,
+            revision = revision,
         )
     }
 }
