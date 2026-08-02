@@ -2,8 +2,11 @@
 // een wijziging in buildSrc maakt het hele hoofdproject ongeldig, terwijl een
 // ingesloten build alleen de projecten opnieuw bouwt die er echt van afhangen.
 //
-// Let op: Google's Maven staat hier niet bij. Die is in deze omgeving
-// onbereikbaar en de plugins die we nodig hebben staan alle op Maven Central.
+// Google's Maven staat er wél bij, maar wordt alleen aangesproken als de
+// Android-plugin daadwerkelijk gevraagd wordt — zie convention/build.gradle.kts,
+// waar dat achter dezelfde SDK-voorwaarde staat als in de hoofdbuild. Op een
+// machine zonder Android SDK wordt er dus niets bij Google opgehaald, en dat is
+// precies de omgeving waarin de pure-JVM modules geschreven zijn.
 
 pluginManagement {
     repositories {
@@ -17,6 +20,7 @@ dependencyResolutionManagement {
     repositories {
         mavenCentral()
         gradlePluginPortal()
+        google()
     }
     versionCatalogs {
         create("libs") {

@@ -22,6 +22,12 @@ kotlin-serializationGradlePlugin = { module = "org.jetbrains.kotlin:kotlin-seria
 detekt-gradlePlugin = { module = "io.gitlab.arturbosch.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 kover-gradlePlugin = { module = "org.jetbrains.kotlinx:kover-gradle-plugin", version.ref = "kover" }
 
+# Alleen toegevoegd als er een Android SDK is; zie build-logic/convention.
+# Ze moeten in dezelfde classloader zitten als de Kotlin-plugin, anders vindt
+# `kotlin.android` de AGP-klassen niet.
+android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+compose-compilerGradlePlugin = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin" }
+
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

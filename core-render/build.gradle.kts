@@ -1,16 +1,11 @@
 // Doet alleen mee als er een Android SDK is; zie settings.gradle.kts.
 
 plugins {
-    alias(libs.plugins.android.library)
-    // Bewust `id(...)` zonder versie, en geen alias.
-    //
-    // `build-logic` is een ingesloten build in pluginManagement en heeft
-    // kotlin-gradle-plugin als `implementation`, dus de Kotlin-plugin staat al
-    // op het klassenpad van deze build — zonder herkenbare versie. Een tweede
-    // verzoek mét versienummer weigert Gradle dan: "already on the classpath
-    // with an unknown version, so compatibility cannot be checked". Zonder
-    // versie pakt hij wat er staat, en dat is per definitie dezelfde Kotlin als
-    // de rest van het project gebruikt.
+    // Alle plugins zonder versie: ze staan al op het klassenpad via
+    // build-logic, en juist dáár moeten ze vandaan komen. Zie
+    // build-logic/convention/build.gradle.kts voor waarom AGP en de
+    // Kotlin-plugin in dezelfde classloader horen.
+    id("com.android.library")
     id("org.jetbrains.kotlin.android")
 }
 
