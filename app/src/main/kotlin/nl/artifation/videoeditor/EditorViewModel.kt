@@ -1,0 +1,117 @@
+package nl.artifation.videoeditor
+
+import androidx.lifecycle.ViewModel
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import nl.artifation.videoeditor.model.Project
+import nl.artifation.videoeditor.model.Sequence
+import nl.artifation.videoeditor.model.TimelineGeometry
+import nl.artifation.videoeditor.model.UndoStack
+import nl.artifation.videoeditor.model.Us
+import nl.artifation.videoeditor.model.moveClipTo
+import nl.artifation.videoeditor.ui.EditorActions
+import nl.artifation.videoeditor.ui.EditorState
+
+/**
+ * De brug tussen de pure modules en het scherm.
+ *
+ * Alle beslissingen staan in `:core-model` — bewerkingen, ongedaan maken,
+ * tijdlijn-geometrie. Deze klasse houdt alleen bij wát er nu geldt en geeft
+ * bewerkingen door. Dat is bewust dun: elke regel logica die hier zou staan, is
+ * een regel die niet getest kan worden zonder toestel.
+ *
+ * **Niet gecompileerd.** Zie README: `:app` staat nog niet in de build.
+ */
+public class EditorViewModel(
+    initial: Project = leegProject(),
+) : ViewModel() {
+
+    private val history = UndoStack(initial)
+
+    public var playheadUs: Us by mutableStateOf(0L)
+        private set
+
+    public var selectedClipId: String? by mutableStateOf(null)
+        private set
+
+    public var pxPerSecond: Float by mutableStateOf(STANDAARD_ZOOM)
+        private set
+
+    public var scrollPx: Float by mutableStateOf(0f)
+        private set
+
+    private var revisie: Int by mutableStateOf(0)
+
+    /** Het project zoals het nu is; `revisie` maakt het leesbaar voor Compose. */
+    public val project: Project
+        get() {
+            revisie // gelezen zodat Compose op wijzigingen let
+            return history.current
+        }
+
+    public val canUndo: Boolean get() = run { revisie; history.canUndo }
+    public val canRedo: Boolean get() = run { revisie; history.canRedo }
+
+    @UnstableApi
+    public fun state(
+        player: Player?,
+        analysis: nl.artifation.videoeditor.ui.AnalysisProgress?,
+    ): EditorState =
+        EditorState(
+            project = project,
+            playheadUs = playheadUs,
+            selectedClipId = selectedClipId,
+            pxPerSecond = pxPerSecond,
+            scrollPx = scrollPx,
+            player = player,
+            analysis = analysis,
+        )
+
+    public fun actions(): EditorActions = EditorActions(
+        onScrub = { playheadUs = it.coerceAtLeast(0L) },
+        onSelect = { selectedClipId = it },
+        onMove = ::verplaatsClip,
+        onZoom = ::zoom,
+        onCancelAnalysis = { /* de wachtrij annuleert; zie AnalysisService */ },
+    )
+
+    public fun undo() {
+        history.undo()
+        revisie++
+    }
+
+    public fun redo() {
+        history.redo()
+        revisie++
+    }
+
+    private fun verplaatsClip(sequenceIndex: Int, itemIndex: Int, targetStartUs: Us) {
+        history.edit { huidig ->
+            val sequences = huidig.sequences.toMutableList()
+            sequences[sequenceIndex] = sequences[sequenceIndex].moveClipTo(itemIndex, targetStartUs)
+            huidig.copy(sequences = sequences)
+        }
+        revisie++
+    }
+
+    private fun zoom(factor: Float) {
+        // De geometrie kent de grenzen; hier wordt niets bedacht.
+        val geometry = TimelineGeometry(pxPerSecond = pxPerSecond, scrollPx = scrollPx)
+            .zoomedBy(factor, anchorX = 0f)
+        pxPerSecond = geometry.pxPerSecond
+        scrollPx = geometry.scrollPx
+    }
+
+    public companion object {
+        /** Ongeveer tien seconden op een telefoonbreedte. */
+        public const val STANDAARD_ZOOM: Float = 40f
+
+        public fun leegProject(): Project = Project(
+            id = "nieuw",
+            sequences = listOf(Sequence(id = "video"), Sequence(id = "audio")),
+        )
+    }
+}

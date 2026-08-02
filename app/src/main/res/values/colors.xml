@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Enige plek waar een kleur buiten :core-design staat, en dat kan niet anders:
+      het venster heeft een achtergrond nodig voordat Compose iets getekend heeft.
+      Moet gelijk blijven aan Tokens.Palette.backdrop.
+    -->
+    <color name="backdrop">#FF07070A</color>
+</resources>

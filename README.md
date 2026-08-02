@@ -9,7 +9,7 @@ Het volledige plan met architectuur, roadmap en risico's staat in
 
 ## Huidige stand
 
-Tien modules gebouwd en getest; twee geschreven maar niet gecompileerd.
+Tien modules gebouwd en getest; twee compleet geschreven maar nooit gecompileerd.
 
 | Module | Status | Inhoud |
 |---|---|---|
@@ -23,10 +23,10 @@ Tien modules gebouwd en getest; twee geschreven maar niet gecompileerd.
 | `:core-errors` | ✅ | Foutentaxonomie, retry-beleid, gebruikersteksten |
 | `:core-thermal` | ✅ | Thermisch beleid, hysterese, blokplanner |
 | `:core-pipeline` | ✅ | **De koppeling**: thermische rem op de wachtrij, analyseplanner, integratietests |
-| `:core-render` | 📝 niet gebouwd | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder` |
-| `:app` | 📝 niet gebouwd | Compose glass-componenten, tijdlijn-canvas |
+| `:core-render` | 📝 compleet, niet gebouwd | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder` |
+| `:app` | 📝 compleet, niet gebouwd | Activity, state-houder, glas-UI, tijdlijn-canvas, resources |
 
-Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **692 tests** zonder
+Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **739 tests** zonder
 emulator of toestel, en dat dekt precies waar stille regressies zitten:
 tijdlijnrekenwerk, DSP, coördinaatomrekening, toestandsmachines en het parsen van
 antwoorden van diensten die je niet in de hand hebt.
@@ -40,7 +40,7 @@ integratietests dat ze samen doen wat de bedoeling is.
 
 ```bash
 ./gradlew controle      # statische analyse, alle tests, dekkingsrapport
-./gradlew test          # alleen de unittests (692, pure JVM)
+./gradlew test          # alleen de unittests (739, pure JVM)
 ./gradlew :core-model:test
 ```
 
@@ -48,25 +48,30 @@ Regeldekking is 95,1%, vertakkingsdekking 66,1%; de ondergrens staat op 90%
 regeldekking. Detekt draait met een basislijn per module in `config/detekt/`:
 bestaande overtredingen zijn bevroren, nieuwe worden tegengehouden.
 
-### De Android-modules staan bewust uit
+### De app bouwen — dit moet op jouw machine
 
-`:app` en `:core-render` bestaan wel als broncode, maar staan **niet** in
-`settings.gradle.kts` en hun `build.gradle.kts` heet `.disabled`. Reden: de
-omgeving waarin ze geschreven zijn had geen Android SDK (`dl.google.com` is
-geblokkeerd op organisatiebeleid), dus die code is nooit gecompileerd. Ze in de
-build zetten zou `./gradlew test` laten falen en een valse indruk van
-"het werkt" geven.
+De Android-modules kunnen in deze omgeving niet gebouwd worden. Niet uit
+tijdgebrek: `maven.google.com` en `dl.google.com` zijn allebei geblokkeerd op
+organisatiebeleid, dus Compose, Media3 én de Android Gradle Plugin zijn
+onbereikbaar. Maven Central spiegelt androidx niet (404) en apt heeft alleen
+SDK-platform **API 23**, terwijl dit project minSdk 31 vraagt.
 
-Aanzetten zodra je een omgeving met de Android SDK hebt:
+Op een machine mét internettoegang tot Google:
 
 ```bash
 mv app/build.gradle.kts.disabled app/build.gradle.kts
 mv core-render/build.gradle.kts.disabled core-render/build.gradle.kts
 # haal de commentaartekens weg bij de include()-regels in settings.gradle.kts
+echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+./gradlew :app:assembleDebug
+./gradlew :app:installDebug        # met je S24 Ultra aangesloten
 ```
 
-Reken erop dat er dan compilatiefouten uit komen — ongecompileerde code heeft ze
-altijd. Zie fase 0 in het bouwplan voor wat er daarna bewezen moet worden.
+De app-module is compleet: activity, state-houder, alle schermonderdelen,
+resources, thema en manifest. Reken er wel op dat de compiler dingen vindt —
+deze code is nooit door een compiler gegaan, alleen tegen de API-documentatie
+gecontroleerd.
 
 ## Ontwerpprincipes
 

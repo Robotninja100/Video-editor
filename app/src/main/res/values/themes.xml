@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      Een kaal thema. De hele interface wordt door Compose getekend met de tokens
+      uit :core-design; dit thema levert alleen het venster waar dat in landt.
+
+      Belangrijk zijn de drie transparante balken: de video vult het scherm en de
+      panelen liggen er als glas overheen, dus het systeem mag daar geen eigen
+      vlak overheen leggen.
+    -->
+    <style name="Theme.VideoEditor" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/backdrop</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

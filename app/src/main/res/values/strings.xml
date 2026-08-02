@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Video-editor</string>
+    <string name="analysis_channel_name">Analyse op de achtergrond</string>
+    <string name="analysis_notification_title">Materiaal analyseren</string>
+</resources>

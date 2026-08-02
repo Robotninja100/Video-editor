@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import nl.artifation.videoeditor.design.Tokens
 import nl.artifation.videoeditor.model.Project
 import nl.artifation.videoeditor.model.TimelineGeometry
@@ -31,6 +33,7 @@ import nl.artifation.videoeditor.model.Us
  * **Niet gecompileerd.** Geen Android SDK beschikbaar; module staat nog niet in
  * `settings.gradle.kts`.
  */
+@UnstableApi
 @Composable
 public fun EditorScreen(
     state: EditorState,
@@ -133,7 +136,13 @@ public data class EditorState(
     val selectedClipId: String?,
     val pxPerSecond: Float,
     val scrollPx: Float,
-    val player: Any?,
+    /**
+     * De speler, of null zolang er niets geladen is.
+     *
+     * Bewust `Player` en niet `CompositionPlayer`: het scherm hoeft alleen te
+     * weten dat er beeld is, en dat houdt de experimentele API uit de UI.
+     */
+    val player: Player?,
     val analysis: AnalysisProgress?,
 )
 
