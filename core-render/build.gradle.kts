@@ -11,7 +11,7 @@ plugins {
 
 android {
     namespace = "nl.artifation.videoeditor.render"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 31 // RenderEffect en moderne MediaCodec-paden

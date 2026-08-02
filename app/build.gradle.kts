@@ -12,12 +12,12 @@ plugins {
 
 android {
     namespace = "nl.artifation.videoeditor"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "nl.artifation.videoeditor"
         minSdk = 31
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1"
     }
