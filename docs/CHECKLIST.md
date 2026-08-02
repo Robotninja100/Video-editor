@@ -9,18 +9,23 @@ Legenda: ✅ af · 🔨 in aanbouw · ⬜ nog niet begonnen · 🔒 geblokkeerd
 
 ## Blokkades
 
-Onderstaande blokkade bepaalt de volgorde van al het overige werk. Zonder Android SDK
-en toestel kan een groot deel van dit project niet gebouwd én niet geverifieerd worden.
+| Vereist | Waarvoor | Status |
+|---|---|---|
+| **Android SDK** | `:app`, `:core-render`, alle Media3-code | ✅ opgelost |
+| **ffmpeg op de werkplek** | Testmateriaal voor fase 0 | ✅ niet meer nodig |
+| **Samsung S24 Ultra** | Fase 0-poort, hardware-codecs, QNN/NPU | 🔒 blijft |
+| **Android NDK** | whisper.cpp JNI (fase 3), EdgeTAM (fase 6) | 🔒 blijft |
 
-| Vereist | Waarvoor |
-|---|---|
-| **Android SDK + Android Studio** | `:app`, `:core-render`, alle Media3-code |
-| **Samsung S24 Ultra aangesloten** | Fase 0-poort, hardware-codecs, QNN/NPU |
-| **Android NDK** | whisper.cpp JNI (fase 3), EdgeTAM-runtime (fase 6) |
-| **ffmpeg op de werkplek** | Genereren van de maskvideo-testfixture voor fase 0 |
+De eerste twee zijn weg. De SDK kon geïnstalleerd worden zodra de Google-servers
+bereikbaar waren; ffmpeg is overbodig geworden doordat het testmateriaal nu op het
+toestel zelf gemaakt wordt, met `MediaCodec` en `Canvas`.
 
-Alles wat hieronder 🔒 heeft, wacht hierop. Alles zonder 🔒 kan op een gewone JVM
-gebouwd en getest worden — daarom is die kolom bewust zo ver mogelijk gevuld.
+Wat níét op te lossen valt in een bouwomgeving: er is geen `/dev/kvm`, dus geen
+bruikbare emulator, en hardwarecodecs bestaan alleen op hardware. Alles wat écht
+door een codec of over de GPU moet, blijft daarom een meting op het toestel — nu
+wel als een scherm in de app in plaats van als een spike op een werkplek.
+
+Alles wat hieronder 🔒 heeft, wacht op het toestel.
 
 ---
 
@@ -31,15 +36,16 @@ Niet doorgaan naar fase 1 zonder dat deze twee bewijzen er liggen. Zie
 
 - [x] Gradle-opzet met pure-JVM modules ✅
 - [x] `RenderPlan` — het exacte, testbare invoerformaat voor de renderer ✅
-- [ ] Android SDK configureren, `:core-render` en `:app` aan `settings.gradle.kts` 🔒
-- [ ] Media3 1.10.1 als afhankelijkheid pinnen (`libs.versions.toml`) 🔒
-- [ ] `RenderPlan.toComposition()` — domme vertaling naar Media3 (spec onderaan) 🔒
-- [ ] Bronvideo + grayscale maskvideo genereren met ffmpeg (bewegende witte cirkel, halve resolutie) 🔒
-- [ ] `MaskedBlurShaderProgram`: tweede `MediaCodec` → `SurfaceTexture` → OES-texture 🔒
-- [ ] Pull-based `advanceMaskTo(targetUs)`, monotoon vooruit, geen seeks 🔒
-- [ ] `updateTexImage()` op Transformer's GL-thread met de juiste EGL-context 🔒
-- [ ] **Bewijs 1 — pariteit:** 10 s exporteren én afspelen in `CompositionPlayer`, frames vergelijken met SSIM op ~10 vaste timestamps 🔒
-- [ ] **Bewijs 2 — masked blur:** cirkel scherp, rest geblurd, synchroon over de volle duur — in preview, in export, én op een getrimde clip (in-point ≠ 0) 🔒
+- [x] Android SDK configureren, `:core-render` en `:app` aan `settings.gradle.kts` ✅
+- [x] Media3 1.10.1 als afhankelijkheid pinnen (`libs.versions.toml`) ✅
+- [x] `RenderPlan.toComposition()` — domme vertaling naar Media3 (spec onderaan) ✅
+- [x] Bronvideo + grayscale maskvideo genereren — op het toestel zelf, zonder ffmpeg ✅
+- [x] `MaskedBlurShaderProgram`: tweede `MediaCodec` → `SurfaceTexture` → OES-texture ✅
+- [x] Pull-based `advanceTo(targetUs)`, monotoon vooruit, geen seeks ✅
+- [x] `updateTexImage()` op Transformer's GL-thread met de juiste EGL-context ✅
+- [x] Spike-scherm in de app dat beide bewijzen meet en de uitslag toont ✅
+- [ ] **Bewijs 1 — pariteit:** de meting draaien op de S24 Ultra 🔒
+- [ ] **Bewijs 2 — masked blur:** de meting draaien op de S24 Ultra 🔒
 - [ ] Go/no-go vastleggen. Faalt bewijs 2, dan terug naar de tekentafel voor maskopslag (RLE per frame of vormgebaseerd) 🔒
 
 ---
@@ -52,12 +58,13 @@ Niet doorgaan naar fase 1 zonder dat deze twee bewijzen er liggen. Zie
 - [x] JSON-persistentie via kotlinx-serialization ✅
 - [x] Undo/redo — snapshotstack ✅
 - [x] `Project.toRenderPlan()` incl. cue-mapping en in-point-offsets ✅
-- [ ] Compose-timeline: scrub 🔒
-- [ ] Compose-timeline: trim aan beide randen 🔒
-- [ ] Compose-timeline: split op de playhead 🔒
-- [ ] Compose-timeline: verplaatsen (drag-and-drop) en gaten tonen 🔒
-- [ ] Preview via `CompositionPlayer`, gekoppeld aan de playhead 🔒
-- [ ] Export via `Transformer`, met voortgang en annuleren 🔒
+- [x] Compose-timeline: scrub ✅
+- [x] Compose-timeline: trim aan beide randen ✅
+- [x] Compose-timeline: split op de playhead ✅
+- [x] Compose-timeline: verplaatsen (drag-and-drop) en gaten tonen ✅
+- [x] Export via `Transformer`, met voortgang en annuleren ✅
+- [ ] Preview via `CompositionPlayer`, gekoppeld aan de playhead — nu alleen in de spike 🔒
+- [ ] Tijdlijn koppelen aan echte media in plaats van de demo-sequence 🔒
 - [ ] Projecten opslaan/laden op schijf, plus autosave 🔒
 - [ ] Media importeren (SAF-picker), duur en resolutie uitlezen 🔒
 
@@ -155,7 +162,9 @@ Niet doorgaan naar fase 1 zonder dat deze twee bewijzen er liggen. Zie
 
 - [x] Unittests op de deterministische kern ✅
 - [x] CI: `./gradlew build` op main en op elke pull request ✅
-- [ ] Lint: ktlint of detekt met een gedeelde configuratie
+- [x] CI levert bij elke build een installeerbare APK op als artefact ✅
+- [x] Android Lint als build-stap; `warningsAsErrors` op `:core-render` ✅
+- [ ] Lint op Kotlin-stijl: ktlint of detekt met een gedeelde configuratie
 - [ ] `CLAUDE.md` met de conventies van deze repo (microseconden, genormaliseerde eenheden, geen Media3 in het model)
 - [ ] Instrumented tests zodra er een Android-module is 🔒
 - [ ] Crash-rapportage of op zijn minst een logbestand op het toestel 🔒
@@ -174,11 +183,12 @@ Zo hoort de vertaling eruit te zien:
 | `RenderPlan` | Media3 |
 |---|---|
 | `RenderPlan` | `Composition` met `EditedMediaItemSequence` per `RenderSequence` |
-| `RenderPlan.width/height/frameRate` | encoderinstellingen op `Transformer` |
+| `RenderPlan.width/height` | `Presentation` op de `Composition` — `Transformer` heeft geen setter voor resolutie |
+| `RenderPlan.frameRate` | `EditedMediaItem.setFrameRate()`, als **boven**grens: Media3 kan de framerate verlagen maar niet verhogen |
 | `RenderItem.Gap` | `EditedMediaItemSequence.Builder.addGap(durationUs)` |
 | `RenderItem.Source` | `EditedMediaItem` van een `MediaItem` |
 | `clipStartUs` / `clipEndUs` | `MediaItem.ClippingConfiguration` |
-| `speed` | `SpeedChangeEffect` |
+| `speed` | `EditedMediaItem.setSpeed(SpeedProvider)` — `SpeedChangeEffect` is in 1.10.1 afgeschaft |
 | `RenderEffect.ColorAdjust` | `RgbAdjustment` / `Contrast` |
 | `RenderEffect.CropPath` | crop-/`Presentation`-effect, waarde per frame uit `interpolateAt()` |
 | `RenderEffect.CaptionOverlays` | `OverlayEffect` met een `BitmapOverlay` per cue |
