@@ -120,11 +120,11 @@ class TimestampAlignmentTest {
 
         assertEquals(0L, words[0].startUs, "buiten de stilte blijft ongemoeid")
         assertEquals(1_500_000L, words[1].startUs, "geschoven naar het einde van de stilte")
-        assertEquals(2_000_000L, words[1].endUs)
+        assertEquals(2_300_000L, words[1].endUs, "het woord schuift, het krimpt niet")
     }
 
     @Test
-    fun `het einde schuift mee als het anders vóór het begin zou liggen`() {
+    fun `een woord houdt zijn duur, ook als de correctie groot is`() {
         val transcript = Transcript(
             listOf(
                 TranscriptSegment(0, 0L, 2_000_000L, "a", listOf(Cue.Word(1_000_000L, 1_100_000L, "a"))),
@@ -136,7 +136,77 @@ class TimestampAlignmentTest {
         )
 
         val word = aligned.segments.single().words.single()
-        assertTrue(word.endUs >= word.startUs, "woord met negatieve duur: $word")
+        assertEquals(1_800_000L, word.startUs)
+        assertEquals(
+            100_000L,
+            word.endUs - word.startUs,
+            "een woord van nul lengte is niet te highlighten en niet aan te wijzen",
+        )
+    }
+
+    @Test
+    fun `twee woorden in dezelfde stilte belanden niet op hetzelfde tijdstip`() {
+        val transcript = Transcript(
+            listOf(
+                TranscriptSegment(
+                    index = 0,
+                    startUs = 0L,
+                    endUs = 2_000_000L,
+                    text = "een twee drie",
+                    words = listOf(
+                        Cue.Word(1_000_000L, 1_100_000L, "een"),
+                        Cue.Word(1_200_000L, 1_500_000L, "twee"),
+                        Cue.Word(1_900_000L, 2_000_000L, "drie"),
+                    ),
+                ),
+            ),
+        )
+
+        val words = TimestampAlignment
+            .align(transcript, listOf(TimestampAlignment.Silence(900_000L, 1_800_000L)))
+            .segments.single().words
+
+        assertEquals(words.map { it.startUs }.distinct().size, words.size, "woorden vallen samen: $words")
+        assertTrue(words.all { it.endUs > it.startUs }, "woord met nul duur: $words")
+        assertTrue(
+            words.zipWithNext().all { (a, b) -> a.endUs <= b.startUs },
+            "volgorde omgegooid: $words",
+        )
+    }
+
+    @Test
+    fun `een verzet woord blijft binnen de grenzen van zijn eigen segment`() {
+        val transcript = Transcript(
+            listOf(
+                TranscriptSegment(0, 0L, 2_000_000L, "laatste", listOf(Cue.Word(1_500_000L, 1_900_000L, "laatste"))),
+                TranscriptSegment(
+                    index = 1,
+                    startUs = 2_000_000L,
+                    endUs = 4_000_000L,
+                    text = "volgende",
+                    words = listOf(Cue.Word(2_100_000L, 2_500_000L, "volgende")),
+                ),
+            ),
+        )
+
+        val aligned = TimestampAlignment.align(
+            transcript,
+            listOf(TimestampAlignment.Silence(1_400_000L, 3_000_000L)),
+        )
+
+        for (segment in aligned.segments) {
+            for (word in segment.words) {
+                assertTrue(
+                    word.startUs >= segment.startUs && word.endUs <= segment.endUs,
+                    "woord $word ligt buiten segment ${segment.startUs}..${segment.endUs}",
+                )
+            }
+        }
+        val alle = aligned.segments.flatMap { it.words }
+        assertTrue(
+            alle.zipWithNext().all { (a, b) -> a.endUs <= b.startUs },
+            "woorden uit twee segmenten vallen samen: $alle",
+        )
     }
 
     @Test
@@ -315,5 +385,163 @@ class AutoEditParseTest {
     fun `het buitenste object wordt genomen bij geneste objecten`() {
         val body = """{"segments": [{"index": 3, "reason": "a"}], "meta": {"model": "x"}}"""
         assertEquals(listOf(3), AutoEdit.parse(body).indices)
+    }
+}
+
+/**
+ * Whisper legt zijn segmentgrenzen op de pauzes. Er zit dus per definitie een gat
+ * tussen twee segmenten, en het eerste woord begint routineus een fractie vóór
+ * het segment. Die woorden moeten ergens terechtkomen.
+ */
+class WordAssignmentTest {
+
+    private val body = """
+        {
+          "text": "dus dat werkt eh prima",
+          "segments": [
+            {"id": 0, "start": 0.5, "end": 2.0, "text": "dus dat werkt"},
+            {"id": 1, "start": 2.6, "end": 4.0, "text": "prima"}
+          ],
+          "words": [
+            {"word": "dus",   "start": 0.48, "end": 0.8},
+            {"word": "dat",   "start": 0.9,  "end": 1.2},
+            {"word": "werkt", "start": 1.3,  "end": 1.9},
+            {"word": "eh",    "start": 2.1,  "end": 2.3},
+            {"word": "prima", "start": 2.7,  "end": 3.2}
+          ]
+        }
+    """.trimIndent()
+
+    @Test
+    fun `geen enkel woord raakt zoek`() {
+        val transcript = Transcription.parse(body)
+
+        val toegewezen = transcript.segments.flatMap { it.words }.map { it.text }
+        assertEquals(listOf("dus", "dat", "werkt", "eh", "prima"), toegewezen)
+    }
+
+    @Test
+    fun `een woord net voor het segment hoort bij dat segment`() {
+        val transcript = Transcription.parse(body)
+
+        assertEquals(listOf("dus", "dat", "werkt", "eh"), transcript.segments[0].words.map { it.text })
+        assertEquals(listOf("prima"), transcript.segments[1].words.map { it.text })
+    }
+
+    @Test
+    fun `een woord in het gat gaat naar het dichtstbijzijnde segment`() {
+        val gat = """
+            {
+              "segments": [
+                {"id": 0, "start": 0.0, "end": 1.0, "text": "a"},
+                {"id": 1, "start": 5.0, "end": 6.0, "text": "b"}
+              ],
+              "words": [{"word": "x", "start": 4.9, "end": 5.0}]
+            }
+        """.trimIndent()
+
+        val transcript = Transcription.parse(gat)
+
+        assertEquals(emptyList(), transcript.segments[0].words.map { it.text })
+        assertEquals(listOf("x"), transcript.segments[1].words.map { it.text })
+    }
+}
+
+class TranscriptionSanityTest {
+
+    @Test
+    fun `een omgedraaid tijdvak levert geen negatieve duur op`() {
+        val transcript = Transcription.parse(
+            """{"segments":[{"id":0,"start":5.0,"end":3.0,"text":"a"}]}""",
+        )
+
+        val segment = transcript.segments.single()
+        assertTrue(segment.endUs >= segment.startUs, "negatieve duur: $segment")
+    }
+
+    @Test
+    fun `negatieve tijden komen de tijdlijn niet in`() {
+        val transcript = Transcription.parse(
+            """{"words":[{"word":"a","start":-2.0,"end":0.4}]}""",
+        )
+
+        assertTrue(transcript.segments.single().startUs >= 0L)
+    }
+
+    @Test
+    fun `met een bekende mediaduur wordt een absurd einde geklemd`() {
+        val transcript = Transcription.parse(
+            """{"segments":[{"id":0,"start":0.0,"end":999999.0,"text":"a"}]}""",
+            mediaDurationUs = 60_000_000L,
+        )
+
+        assertEquals(60_000_000L, transcript.segments.single().endUs)
+    }
+
+    @Test
+    fun `een omgedraaide woordenlijst geeft geen segment met negatieve duur`() {
+        val transcript = Transcription.parse(
+            """{"words":[{"word":"laat","start":3.0,"end":3.4},{"word":"vroeg","start":0.0,"end":0.4}]}""",
+        )
+
+        val segment = transcript.segments.single()
+        assertEquals(0L, segment.startUs)
+        assertEquals(3_400_000L, segment.endUs)
+    }
+}
+
+class MaskDimensionTest {
+
+    @Test
+    fun `afmetingen mogen ook als size-paar komen`() {
+        val frames = Segmentation.parse("""{"masks":[{"frame":0,"size":[4,6],"counts":[10,14]}]}""")
+
+        val frame = frames.single()
+        assertEquals(6, frame.width)
+        assertEquals(4, frame.height)
+        assertEquals(24, frame.pixels.size)
+    }
+
+    @Test
+    fun `een frame met een onmogelijke afmeting valt af zonder de rest mee te nemen`() {
+        val frames = Segmentation.parse(
+            """{"masks":[
+                {"frame":0,"width":-960,"height":540,"counts":[1]},
+                {"frame":1,"width":4,"height":4,"counts":[8,8]}
+            ]}""",
+        )
+
+        assertEquals(listOf(1), frames.map { it.frameIndex }, "één stuk frame nam de hele batch mee")
+    }
+
+    @Test
+    fun `twee negatieve afmetingen geven geen positief product`() {
+        val body = """{"masks":[{"frame":0,"width":-4,"height":-4,"counts":[8,8]}]}"""
+
+        assertEquals(emptyList(), Segmentation.parse(body))
+    }
+
+    @Test
+    fun `een afmeting die overloopt wordt geweigerd`() {
+        val frames = Segmentation.parse("""{"masks":[{"frame":0,"width":65536,"height":65536,"counts":[1]}]}""")
+
+        assertEquals(emptyList(), frames, "65536*65536 loopt over naar exact 0 en ziet er daarna geloofwaardig uit")
+    }
+}
+
+class AutoEditProseTest {
+
+    @Test
+    fun `een accolade in het proza maakt de selectie niet leeg`() {
+        val antwoord = """Ik heb "{" laten staan. Hier is het resultaat: {"segments":[{"index":1,"reason":"kern"}]}"""
+
+        val selectie = AutoEdit.parse(antwoord)
+
+        assertEquals(listOf(1), selectie.indices)
+    }
+
+    @Test
+    fun `zonder bruikbare JSON blijft het leeg`() {
+        assertEquals(emptyList(), AutoEdit.parse("Ik kon geen keuze maken { misschien later }").indices)
     }
 }

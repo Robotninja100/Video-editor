@@ -76,10 +76,11 @@ public object AutoEdit {
      * bruikbare JSON, dan is het resultaat leeg — nooit een gok.
      */
     public fun parse(body: String): Selection {
-        val payload = extractJsonObject(body) ?: return Selection(emptyList(), emptyMap())
-
-        val selection = runCatching { json.decodeFromString<ApiSelection>(payload) }
-            .getOrElse { return Selection(emptyList(), emptyMap()) }
+        val selection = jsonObjectCandidates(body)
+            .firstNotNullOfOrNull { payload ->
+                runCatching { json.decodeFromString<ApiSelection>(payload) }.getOrNull()
+            }
+            ?: return Selection(emptyList(), emptyMap())
 
         return Selection(
             indices = selection.segments.map { it.index },
@@ -88,10 +89,33 @@ public object AutoEdit {
     }
 
     /** Snijdt het eerste complete JSON-object eruit, met respect voor strings. */
-    internal fun extractJsonObject(text: String): String? {
-        val start = text.indexOf('{')
-        if (start < 0) return null
+    internal fun extractJsonObject(text: String): String? =
+        jsonObjectCandidates(text).firstOrNull()
 
+    /**
+     * Alle plekken waar een compleet JSON-object zou kunnen beginnen, op volgorde.
+     *
+     * Bij de eerste `{` beginnen is niet genoeg. Een model dat schrijft `Ik heb
+     * "{" laten staan. Hier is het resultaat: {"segments":[…]}` zet een accolade
+     * in zijn eigen proza, en vanaf daar loopt het bijhouden van "sta ik in een
+     * string" uit de pas: het scannen slaagt of faalt, maar in beide gevallen is
+     * de uitkomst geen bruikbare JSON en werd de selectie stilzwijgend leeg.
+     *
+     * Elke `{` is nu een kandidaat en [parse] neemt de eerste die ook echt
+     * decodeert. Dat is nog steeds nooit een gok — het is alles of niets, alleen
+     * dan per kandidaat.
+     */
+    internal fun jsonObjectCandidates(text: String): Sequence<String> = sequence {
+        var from = 0
+        while (true) {
+            val start = text.indexOf('{', from)
+            if (start < 0) return@sequence
+            balancedObjectAt(text, start)?.let { yield(it) }
+            from = start + 1
+        }
+    }
+
+    private fun balancedObjectAt(text: String, start: Int): String? {
         var depth = 0
         var inString = false
         var escaped = false

@@ -63,9 +63,23 @@ public object Segmentation {
         val frame: Int = 0,
         val width: Int = 0,
         val height: Int = 0,
+        /**
+         * `[hoogte, breedte]`, zoals het gangbare COCO-RLE-formaat het levert.
+         *
+         * Zonder dit veld leverde een antwoord dat de afmetingen zó opgeeft een
+         * mask van nul bytes op: `width` en `height` bleven op hun default 0,
+         * `ignoreUnknownKeys` slikte `size`, en `decodeRle(counts, 0)` gaf braaf
+         * een lege array terug. Geen fout, geen waarschuwing — de blur deed
+         * alleen niets meer.
+         */
+        val size: List<Int> = emptyList(),
         /** COCO-stijl RLE: afwisselend aantal nullen en enen, rijgewijs. */
         val counts: List<Int> = emptyList(),
-    )
+    ) {
+        /** `width`/`height` als de dienst ze los meestuurt, anders uit `size`. */
+        val resolvedWidth: Int get() = if (width > 0) width else size.getOrElse(1) { 0 }
+        val resolvedHeight: Int get() = if (height > 0) height else size.getOrElse(0) { 0 }
+    }
 
     public data class MaskFrame(
         val frameIndex: Int,
@@ -85,15 +99,42 @@ public object Segmentation {
             (frameIndex * 31 + width) * 31 + height + pixels.contentHashCode()
     }
 
+    /**
+     * Frames met onmogelijke afmetingen worden overgeslagen, niet gegooid.
+     *
+     * Eén negatieve breedte liet eerder `require` in [decodeRle] klappen en nam
+     * daarmee de masks van álle frames mee — terwijl dezelfde module bij een
+     * verkeerd getelde run juist afkapt in plaats van te mislukken, en
+     * [AutoEdit] bij dit soort invoer wél defensief is. Twee negatieve
+     * afmetingen gaven bovendien een positief product, en 65536×65536 liep over
+     * naar exact nul: allebei een MaskFrame dat er geloofwaardig uitziet en niets
+     * bevat.
+     */
     public fun parse(body: String): List<MaskFrame> =
-        json.decodeFromString<ApiResponse>(body).masks.map { mask ->
-            MaskFrame(
-                frameIndex = mask.frame,
-                width = mask.width,
-                height = mask.height,
-                pixels = decodeRle(mask.counts, mask.width * mask.height),
-            )
+        json.decodeFromString<ApiResponse>(body).masks.mapNotNull { mask ->
+            val width = mask.resolvedWidth
+            val height = mask.resolvedHeight
+            val totalPixels = width.toLong() * height
+            if (width <= 0 || height <= 0 || totalPixels > MAX_PIXELS) {
+                null
+            } else {
+                MaskFrame(
+                    frameIndex = mask.frame,
+                    width = width,
+                    height = height,
+                    pixels = decodeRle(mask.counts, totalPixels.toInt()),
+                )
+            }
         }
+
+    /**
+     * Bovengrens per mask: 8K bij 8K.
+     *
+     * Ruim boven alles wat een telefoon opneemt, en ver onder de grens waar
+     * `width * height` als Int overloopt of waar een enkele allocatie het
+     * geheugen opeet.
+     */
+    private const val MAX_PIXELS: Long = 8192L * 8192L
 
     /**
      * Decodeert COCO-stijl RLE naar een bytemask.
