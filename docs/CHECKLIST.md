@@ -154,7 +154,7 @@ Niet doorgaan naar fase 1 zonder dat deze twee bewijzen er liggen. Zie
 ## Doorlopend
 
 - [x] Unittests op de deterministische kern ✅
-- [x] CI: `./gradlew test` op push en PR ✅
+- [x] CI: `./gradlew build` op main en op elke pull request ✅
 - [ ] Lint: ktlint of detekt met een gedeelde configuratie
 - [ ] `CLAUDE.md` met de conventies van deze repo (microseconden, genormaliseerde eenheden, geen Media3 in het model)
 - [ ] Instrumented tests zodra er een Android-module is 🔒

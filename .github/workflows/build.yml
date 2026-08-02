@@ -1,8 +1,10 @@
 name: build
 
+# Alleen main en pull requests: met `branches: ["**"]` erbij draait elke push op
+# een PR-branch twee keer, één keer als push en één keer als pull_request.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
 
 jobs:
