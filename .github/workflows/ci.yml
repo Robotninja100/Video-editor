@@ -248,6 +248,14 @@ jobs:
       - name: Android-modules aanzetten
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
+      # Goedkope controle dat `controle` ook een geldige takengrafiek oplevert
+      # zodra de Android-modules meedoen. Die opdracht vroeg eerder om
+      # `:app:detekt`, een taak die niet bestaat — en dat merkte je pas op de
+      # enige machine waar je hem wilde draaien. `--dry-run` bouwt de grafiek
+      # zonder iets uit te voeren.
+      - name: Takengrafiek van `controle` met Android erbij
+        run: ./gradlew controle --dry-run
+
       - name: APK bouwen
         run: set -o pipefail && ./gradlew :app:assembleDebug 2>&1 | tee build.log
 

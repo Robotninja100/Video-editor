@@ -15,10 +15,14 @@ plugins {
 }
 
 dependencies {
-    // De subprojecten bestaan al als Project-objecten zodra dit script draait;
-    // ze zijn alleen nog niet geëvalueerd. Dat is genoeg voor Kover.
+    // Alleen modules die Kover zelf toepassen tellen mee. `withId` vuurt op het
+    // moment dat een module de plugin aanzet, dus de Android-modules — die de
+    // conventieplugin niet gebruiken en geen Kover kennen — vallen er vanzelf
+    // buiten in plaats van de aggregatie te laten struikelen.
     subprojects.forEach { module ->
-        add("kover", module)
+        module.plugins.withId("org.jetbrains.kotlinx.kover") {
+            add("kover", module)
+        }
     }
 }
 

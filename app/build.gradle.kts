@@ -1,9 +1,17 @@
-// Hernoem naar build.gradle.kts en zet de include() aan in settings.gradle.kts
-// zodra de Android SDK beschikbaar is. Zie docs/BOUWPLAN.md, fase 0.
+// Doet alleen mee als er een Android SDK is; zie settings.gradle.kts.
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // Bewust `id(...)` zonder versie, en geen alias.
+    //
+    // `build-logic` is een ingesloten build in pluginManagement en heeft
+    // kotlin-gradle-plugin als `implementation`, dus de Kotlin-plugin staat al
+    // op het klassenpad van deze build — zonder herkenbare versie. Een tweede
+    // verzoek mét versienummer weigert Gradle dan: "already on the classpath
+    // with an unknown version, so compatibility cannot be checked". Zonder
+    // versie pakt hij wat er staat, en dat is per definitie dezelfde Kotlin als
+    // de rest van het project gebruikt.
+    id("org.jetbrains.kotlin.android")
     alias(libs.plugins.kotlin.compose)
 }
 
