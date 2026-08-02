@@ -5,7 +5,8 @@ auto-blur, auto-ondertiteling, auto-knippen op stiltes, auto-reframe naar 9:16 e
 auto-edit.
 
 Het volledige plan met architectuur, roadmap en risico's staat in
-**[docs/BOUWPLAN.md](docs/BOUWPLAN.md)**.
+**[docs/BOUWPLAN.md](docs/BOUWPLAN.md)**. Wat er nog moet gebeuren, staat als
+afvinkbare lijst in **[docs/CHECKLIST.md](docs/CHECKLIST.md)**.
 
 ## Huidige stand
 
@@ -13,9 +14,9 @@ De fundering staat: de twee modules die géén Android SDK nodig hebben, met tes
 
 | Module | Status | Inhoud |
 |---|---|---|
-| `:core-model` | ✅ | Timeline-model, bewerkingen, validatie, JSON-persistentie |
-| `:core-analysis` | ✅ | Stiltedetectie (RMS + hysterese) |
-| `:core-render` | ⬜ | `toComposition()`, `MaskedBlurShaderProgram` — vereist Android SDK |
+| `:core-model` | ✅ | Timeline-model, bewerkingen, validatie, JSON, undo/redo, `RenderPlan` |
+| `:core-analysis` | ✅ | Stiltedetectie, loudness (EBU R128), sidecars, scenedetectie, reframe-smoothing, auto-edit |
+| `:core-render` | ⬜ | `RenderPlan` → Media3, `MaskedBlurShaderProgram` — vereist Android SDK |
 | `:app` | ⬜ | Compose-UI en timeline |
 | `:ml-whisper` | ⬜ | whisper.cpp via JNI |
 | `:ml-tracking` | ⬜ | EdgeTAM via QNN |
@@ -24,10 +25,15 @@ De fundering staat: de twee modules die géén Android SDK nodig hebben, met tes
 zonder emulator of toestel, en dat is precies waar de stille regressies zitten:
 tijdlijnrekenwerk en DSP.
 
+Om dezelfde reden staat álle beslislogica van de renderer in `RenderPlan` — welke
+clips, welke trims, welke effectvolgorde, en hoe brontijden naar cliptijden worden
+omgerekend. `:core-render` vertaalt dat straks één op één naar Media3 en beslist
+zelf niets. De vertaaltabel staat onderaan de checklist.
+
 ## Bouwen
 
 ```bash
-./gradlew test          # alle unittests (37, pure JVM)
+./gradlew test          # alle unittests (147, pure JVM)
 ./gradlew :core-model:test
 ```
 

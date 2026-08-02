@@ -17,4 +17,8 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
+    // De loudness-tests draaien de referentiesignalen uit EBU Tech 3341: 80 seconden
+    // audio op 48 kHz, in Double door twee filtertrappen. Expliciet ingesteld zodat
+    // een bouwmachine met weinig geheugen niet stilletjes omvalt.
+    maxHeapSize = "1g"
 }
