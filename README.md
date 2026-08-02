@@ -26,7 +26,7 @@ Tien modules gebouwd en getest; twee compleet geschreven maar nooit gecompileerd
 | `:core-render` | 📝 compleet, niet gebouwd | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder` |
 | `:app` | 📝 compleet, niet gebouwd | Activity, state-houder, glas-UI, tijdlijn-canvas, resources |
 
-Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **785 tests** zonder
+Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **786 tests** zonder
 emulator of toestel, en dat dekt precies waar stille regressies zitten:
 tijdlijnrekenwerk, DSP, coördinaatomrekening, toestandsmachines en het parsen van
 antwoorden van diensten die je niet in de hand hebt.
