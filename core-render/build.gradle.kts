@@ -24,6 +24,17 @@ android {
             isReturnDefaultValues = true
         }
     }
+
+    lint {
+        // Deze module bestáát uit Transformer- en effect-code, en die staat bij
+        // Media3 vrijwel volledig als @UnstableApi gemarkeerd. Elke regel apart
+        // annoteren levert honderden annotaties op zonder dat er iets veiliger van
+        // wordt. De echte maatregel staat in libs.versions.toml: Media3 is
+        // vastgepind op één versie, zodat een upgrade een bewuste stap is.
+        disable += "UnsafeOptInUsageError"
+        warningsAsErrors = true
+        abortOnError = true
+    }
 }
 
 kotlin {

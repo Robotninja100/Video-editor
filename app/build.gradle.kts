@@ -49,6 +49,13 @@ android {
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
     }
+
+    lint {
+        // Zie :core-render — CompositionPlayer en Transformer zijn @UnstableApi,
+        // en die staan hier in het hart van preview en export.
+        disable += "UnsafeOptInUsageError"
+        abortOnError = true
+    }
 }
 
 kotlin {
