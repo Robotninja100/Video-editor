@@ -13,6 +13,15 @@ dependencies {
 
 kotlin {
     jvmToolchain(21)
+    // Zie :core-model — bytecode op 17 zodat de Android-modules dit kunnen gebruiken.
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 tasks.test {

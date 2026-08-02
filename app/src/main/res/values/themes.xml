@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Bewust een platformthema en niet Theme.MaterialComponents: de hele UI is
+      Compose, dus het XML-thema hoeft alleen de systeembalken en de
+      achtergrondkleur te zetten voordat Compose het overneemt.
+    -->
+    <style name="Theme.VideoEditor" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

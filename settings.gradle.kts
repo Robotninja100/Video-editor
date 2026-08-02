@@ -20,6 +20,10 @@ rootProject.name = "video-editor"
 include(":core-model")
 include(":core-analysis")
 
-// Android-modules worden toegevoegd zodra de Android SDK beschikbaar is:
-//   :app  :core-render  :ml-whisper  :ml-tracking
+// Android-modules. Vereisen de Android SDK; zie README.md §"Bouwen".
+include(":core-render")
+include(":app")
+
+// Nog niet aangemaakt; die wachten op de NDK (fase 3 en 6):
+//   :ml-whisper  :ml-tracking
 // Zie docs/BOUWPLAN.md.
