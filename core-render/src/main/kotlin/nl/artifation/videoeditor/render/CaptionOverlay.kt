@@ -71,10 +71,14 @@ internal class CaptionOverlay(
         // op een lagere resolutie dan de export, en pixels zouden daar zichtbaar
         // verschillen. Hoogte en niet breedte, zodat tekst in liggend materiaal
         // niet ineens de halve breedte beslaat.
-        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = style.fontSizeFrac * frameHeight
-            typeface = Typeface.DEFAULT_BOLD
-        }
+        //
+        // Bewust zonder `apply`: `Paint` heeft zélf een veld `style`, en binnen zo'n
+        // blok dekt dat de ondertitelstijl af. `style.fontSizeFrac` zoekt dan een
+        // lettergrootte op een `Paint.Style`, en dat is precies de fout die de
+        // compiler in CI eruit haalde.
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+        paint.textSize = style.fontSizeFrac * frameHeight
+        paint.typeface = Typeface.DEFAULT_BOLD
 
         val tekstBreedte = (frameWidth * TEKST_BREEDTE_FRACTIE).toInt()
         val layout = StaticLayout.Builder
