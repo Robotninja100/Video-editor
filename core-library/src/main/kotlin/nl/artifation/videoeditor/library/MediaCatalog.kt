@@ -13,14 +13,13 @@ public data class MediaFilter(
     val hasAudio: Boolean? = null,
     val orientation: Orientation? = null,
 ) {
-    public fun matches(asset: MediaAsset): Boolean {
-        if (query != null && !asset.matchesQuery(query)) return false
-        if (minDurationUs != null && asset.durationUs < minDurationUs) return false
-        if (maxDurationUs != null && asset.durationUs > maxDurationUs) return false
-        if (hasAudio != null && asset.hasAudio != hasAudio) return false
-        if (orientation != null && asset.orientation != orientation) return false
-        return true
-    }
+    /** Een niet-ingevuld criterium filtert niet; alle ingevulde moeten kloppen. */
+    public fun matches(asset: MediaAsset): Boolean =
+        (query == null || asset.matchesQuery(query)) &&
+            (minDurationUs == null || asset.durationUs >= minDurationUs) &&
+            (maxDurationUs == null || asset.durationUs <= maxDurationUs) &&
+            (hasAudio == null || asset.hasAudio == hasAudio) &&
+            (orientation == null || asset.orientation == orientation)
 }
 
 private fun MediaAsset.matchesQuery(query: String): Boolean {

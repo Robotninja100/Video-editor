@@ -153,19 +153,30 @@ public class SidecarIndex(
 
     private fun stateOf(asset: MediaAsset, kind: AnalysisKind, path: String): SidecarState {
         val record = storage.read(path) ?: return SidecarState.Missing
-        if (record.assetId != asset.id) {
-            return SidecarState.Outdated(record, OutdatedReason.MISMATCHED_ASSET)
+        val reason = outdatedReason(record, asset, kind)
+        return if (reason == null) {
+            SidecarState.Ready(record)
+        } else {
+            SidecarState.Outdated(record, reason)
         }
+    }
+
+    /** De eerste reden waarom [record] niet meer bruikbaar is, of null. */
+    private fun outdatedReason(
+        record: SidecarRecord,
+        asset: MediaAsset,
+        kind: AnalysisKind,
+    ): OutdatedReason? = when {
+        record.assetId != asset.id -> OutdatedReason.MISMATCHED_ASSET
+
         // Eerst de bron: is het bestand gewijzigd, dan klopt de analyse sowieso
         // niet meer, ook al is hij met de huidige versie gemaakt.
-        if (record.sourceRevision != asset.sourceRevision) {
-            return SidecarState.Outdated(record, OutdatedReason.SOURCE_CHANGED)
-        }
+        record.sourceRevision != asset.sourceRevision -> OutdatedReason.SOURCE_CHANGED
+
         // Een nieuwere versie dan de onze is geen probleem: dat resultaat komt
         // van een beter model en blijft bruikbaar na een downgrade van de app.
-        if (record.analysisVersion < versions.of(kind)) {
-            return SidecarState.Outdated(record, OutdatedReason.STALE_VERSION)
-        }
-        return SidecarState.Ready(record)
+        record.analysisVersion < versions.of(kind) -> OutdatedReason.STALE_VERSION
+
+        else -> null
     }
 }

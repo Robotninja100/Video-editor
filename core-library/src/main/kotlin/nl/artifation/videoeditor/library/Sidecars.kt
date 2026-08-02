@@ -46,6 +46,9 @@ public object SidecarPaths {
 
     public const val CACHE_DIR: String = ".cache"
 
+    /** `.cache/<assetId>/<bestand>` — precies drie stukken, niet meer of minder. */
+    private const val PATH_SEGMENTS: Int = 3
+
     private const val MASK_PREFIX = "masks_"
     private const val MASK_SUFFIX = ".mp4"
 
@@ -69,7 +72,7 @@ public object SidecarPaths {
     /** Het asset waar een pad bij hoort, of null als het pad niet in de cache ligt. */
     public fun assetIdOf(path: String): String? {
         val parts = path.split('/')
-        if (parts.size != 3 || parts[0] != CACHE_DIR) return null
+        if (parts.size != PATH_SEGMENTS || parts[0] != CACHE_DIR) return null
         return parts[1].takeIf { it.isNotBlank() }
     }
 
@@ -125,6 +128,7 @@ public interface SidecarStorage {
     public fun read(path: String): SidecarRecord?
     public fun write(path: String, record: SidecarRecord)
     public fun delete(path: String): Boolean
+
     /** Alle bekende paden, in een stabiele volgorde. */
     public fun paths(): List<String>
     public fun exists(path: String): Boolean = read(path) != null

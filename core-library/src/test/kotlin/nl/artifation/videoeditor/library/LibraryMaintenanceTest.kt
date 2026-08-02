@@ -28,7 +28,11 @@ class LibraryMaintenanceTest {
 
         val kandidaten = LibraryMaintenance.unusedAssets(catalog, projects)
 
-        assertEquals(listOf(ongebruikt.id), kandidaten.map { it.id }, "kandidaten: ${kandidaten.map { it.displayName }}")
+        assertEquals(
+            listOf(ongebruikt.id),
+            kandidaten.map { it.id },
+            "kandidaten: ${kandidaten.map { it.displayName }}",
+        )
     }
 
     @Test
@@ -78,7 +82,10 @@ class LibraryMaintenanceTest {
     @Test
     fun `sidecars zonder asset zijn wezen`() {
         index.write(gebruikt, AnalysisKind.SCENES)
-        storage.write(SidecarPaths.of("verdwenen", AnalysisKind.SCENES), SidecarRecord("verdwenen", AnalysisKind.SCENES, 1, 0L))
+        storage.write(
+            SidecarPaths.of("verdwenen", AnalysisKind.SCENES),
+            SidecarRecord("verdwenen", AnalysisKind.SCENES, 1, 0L),
+        )
 
         val wezen = LibraryMaintenance.orphanSidecars(catalog, storage)
 

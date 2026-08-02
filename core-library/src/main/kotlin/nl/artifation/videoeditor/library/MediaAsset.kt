@@ -120,13 +120,16 @@ public object MediaIdentity {
         val bytes = MessageDigest.getInstance("SHA-256").digest(key.toByteArray(Charsets.UTF_8))
         val hex = StringBuilder(ID_LENGTH)
         for (index in 0 until (ID_LENGTH + 1) / 2) {
-            val value = bytes[index].toInt() and 0xFF
-            hex.append(HEX[value ushr 4]).append(HEX[value and 0x0F])
+            val value = bytes[index].toInt() and BYTE_MASK
+            hex.append(HEX[value ushr NIBBLE_BITS]).append(HEX[value and NIBBLE_MASK])
         }
         return hex.substring(0, ID_LENGTH)
     }
 
     private const val HEX = "0123456789abcdef"
+    private const val BYTE_MASK = 0xFF
+    private const val NIBBLE_BITS = 4
+    private const val NIBBLE_MASK = 0x0F
 }
 
 /**
