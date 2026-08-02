@@ -45,6 +45,26 @@ class ImportNaarWerkTest {
     }
 
     @Test
+    fun `een verouderde maskvideo levert segmentatiewerk op`() {
+        // De json is vers, alleen de maskvideo komt van een oudere bronrevisie.
+        // `SidecarIndex.pending` meldt dit asset als openstaand werk; als de
+        // planner er dan geen taak voor maakt, blijft het eeuwig openstaan.
+        val a = asset("a")
+        for (kind in AnalysisKind.entries) index.write(a, kind)
+        index.writeMask(asset("a", revision = 0L), 0)
+
+        assertTrue(
+            index.pending(MediaCatalog.of(listOf(a))).isNotEmpty(),
+            "de bibliotheek ziet het als openstaand werk",
+        )
+        val taken = AnalysisPlanner.plan(a, index, nowUs = 0L, includeSegmentation = true)
+        assertTrue(
+            taken.any { it.kind is JobKind.Segmentation },
+            "openstaand werk dat niemand oppakt: ${taken.map { it.kind }}",
+        )
+    }
+
+    @Test
     fun `een clip die al geanalyseerd is levert geen werk op`() {
         val a = asset("a")
         for (kind in AnalysisKind.entries) index.write(a, kind)

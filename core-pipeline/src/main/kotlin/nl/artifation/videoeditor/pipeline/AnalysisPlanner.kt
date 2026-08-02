@@ -65,7 +65,17 @@ public object AnalysisPlanner {
 
             // Segmentatie alleen op verzoek: het is de enige analyse die per
             // frame betaald wordt, dus die hoort niet bij elke import te draaien.
-            if (includeSegmentation && status.state(AnalysisKind.SUBJECTS).needsAnalysis) {
+            //
+            // Een verouderde maskvideo telt ook mee. De masks komen uit dezelfde
+            // segmentatie als subjects.json, dus een mask van een oudere
+            // bronrevisie betekent dat die segmentatie over moet — ook al ziet de
+            // json er nog vers uit. Zonder deze regel meldt `SidecarIndex.pending`
+            // het asset wel als openstaand werk, maar levert de planner er geen
+            // enkele taak voor op: openstaand werk dat niemand oppakt.
+            val segmentatieVerouderd = status.state(AnalysisKind.SUBJECTS).needsAnalysis ||
+                status.staleMaskIndices.isNotEmpty()
+
+            if (includeSegmentation && segmentatieVerouderd) {
                 add(
                     job(
                         id = "${asset.id}:segmentatie",
