@@ -29,7 +29,14 @@ public data class LoudnessResult(
 
     /** Lineaire factor om [targetLufs] te halen. */
     public fun gainFactorTo(targetLufs: Float): Float =
-        10f.pow(gainDbTo(targetLufs) / 20f)
+        BASE_TEN.pow(gainDbTo(targetLufs) / DB_PER_AMPLITUDE_DECADE)
+
+    private companion object {
+        const val BASE_TEN: Float = 10f
+
+        /** Amplitude in dB is 20·log10; vermogen in dB is 10·log10. */
+        const val DB_PER_AMPLITUDE_DECADE: Float = 20f
+    }
 }
 
 public object Loudness {
@@ -45,6 +52,10 @@ public object Loudness {
 
     private const val BLOCK_MS = 400
     private const val OVERLAP = 0.75
+    private const val MS_PER_SECOND = 1000
+
+    /** Vermogen in dB is 10·log10, niet 20·log10 — hier wordt kwadraat gemeten. */
+    private const val DB_PER_POWER_DECADE = 10f
 
     /**
      * Meet integrated loudness van één of meer kanalen.
@@ -53,20 +64,28 @@ public object Loudness {
      */
     public fun measure(channels: List<FloatArray>, sampleRate: Int): LoudnessResult {
         require(sampleRate > 0) { "sampleRate moet positief zijn" }
-        if (channels.isEmpty() || channels.first().isEmpty()) {
-            return LoudnessResult(null, 0)
+        if (channels.isNotEmpty() && channels.first().isNotEmpty()) {
+            require(channels.all { it.size == channels.first().size }) {
+                "alle kanalen moeten even lang zijn"
+            }
         }
-        require(channels.all { it.size == channels.first().size }) {
-            "alle kanalen moeten even lang zijn"
+
+        val gated = gate(blockPowers(channels, sampleRate))
+        return if (gated.isEmpty()) {
+            LoudnessResult(null, 0)
+        } else {
+            LoudnessResult(integratedLufs = toLufs(gated.average()), gatedBlocks = gated.size)
         }
+    }
+
+    /** Gemiddelde kwadraat per blok, gesommeerd over kanalen (G = 1 voor L/R). */
+    private fun blockPowers(channels: List<FloatArray>, sampleRate: Int): List<Double> {
+        val blockSize = (sampleRate * BLOCK_MS / MS_PER_SECOND).coerceAtLeast(1)
+        if (channels.isEmpty() || channels.first().size < blockSize) return emptyList()
 
         val weighted = channels.map { kWeight(it, sampleRate) }
-
-        val blockSize = sampleRate * BLOCK_MS / 1000
         val hop = (blockSize * (1.0 - OVERLAP)).toInt().coerceAtLeast(1)
-        if (weighted.first().size < blockSize) return LoudnessResult(null, 0)
 
-        // Gemiddelde kwadraat per blok, gesommeerd over kanalen (G = 1 voor L/R).
         val blockPower = mutableListOf<Double>()
         var offset = 0
         while (offset + blockSize <= weighted.first().size) {
@@ -81,20 +100,20 @@ public object Loudness {
             blockPower.add(power)
             offset += hop
         }
+        return blockPower
+    }
 
-        // Trap 1: absolute gate.
+    /**
+     * De gating in twee trappen: eerst wat er absoluut te stil is, daarna wat
+     * er te stil is ten opzichte van de rest. Zonder die tweede trap drukt een
+     * lange pauze de meting omlaag.
+     */
+    private fun gate(blockPower: List<Double>): List<Double> {
         val aboveAbsolute = blockPower.filter { toLufs(it) > ABSOLUTE_GATE_LUFS }
-        if (aboveAbsolute.isEmpty()) return LoudnessResult(null, 0)
+        if (aboveAbsolute.isEmpty()) return emptyList()
 
-        // Trap 2: relatieve gate ten opzichte van het gemiddelde daarvan.
         val relativeThreshold = toLufs(aboveAbsolute.average()) + RELATIVE_GATE_LU
-        val gated = aboveAbsolute.filter { toLufs(it) > relativeThreshold }
-        if (gated.isEmpty()) return LoudnessResult(null, 0)
-
-        return LoudnessResult(
-            integratedLufs = toLufs(gated.average()),
-            gatedBlocks = gated.size,
-        )
+        return aboveAbsolute.filter { toLufs(it) > relativeThreshold }
     }
 
     /** Past een versterking toe; waarden buiten [-1, 1] worden geclipt. */
@@ -102,8 +121,11 @@ public object Loudness {
         FloatArray(samples.size) { (samples[it] * factor).coerceIn(-1f, 1f) }
 
     private fun toLufs(meanSquare: Double): Float =
-        if (meanSquare <= 0.0) Float.NEGATIVE_INFINITY
-        else OFFSET_DB + 10f * log10(meanSquare).toFloat()
+        if (meanSquare <= 0.0) {
+            Float.NEGATIVE_INFINITY
+        } else {
+            OFFSET_DB + DB_PER_POWER_DECADE * log10(meanSquare).toFloat()
+        }
 
     /**
      * K-weging: een high-shelf die de hoge tonen optilt, gevolgd door een
@@ -122,14 +144,25 @@ public object Loudness {
         val a2: Double,
     )
 
+    // De getallen hieronder komen letterlijk uit BS.1770 — ze zijn niet afgerond
+    // en niet zelf gekozen. Elke wijziging is een andere meting.
+    private const val SHELF_FREQUENCY_HZ = 1681.974450955533
+    private const val SHELF_GAIN_DB = 3.999843853973347
+    private const val SHELF_Q = 0.7071752369554196
+    private const val SHELF_VB_EXPONENT = 0.4996667741545416
+    private const val HIGH_PASS_FREQUENCY_HZ = 38.13547087602444
+    private const val HIGH_PASS_Q = 0.5003270373238773
+
+    private const val BASE_TEN = 10.0
+    private const val DB_PER_AMPLITUDE_DECADE = 20.0
+
     internal fun shelfCoefficients(sampleRate: Int): Biquad {
-        val f0 = 1681.974450955533
-        val gainDb = 3.999843853973347
-        val q = 0.7071752369554196
+        val f0 = SHELF_FREQUENCY_HZ
+        val q = SHELF_Q
 
         val k = tan(PI * f0 / sampleRate)
-        val vh = 10.0.pow(gainDb / 20.0)
-        val vb = vh.pow(0.4996667741545416)
+        val vh = BASE_TEN.pow(SHELF_GAIN_DB / DB_PER_AMPLITUDE_DECADE)
+        val vb = vh.pow(SHELF_VB_EXPONENT)
         val a0 = 1.0 + k / q + k * k
 
         return Biquad(
@@ -142,8 +175,8 @@ public object Loudness {
     }
 
     internal fun highPassCoefficients(sampleRate: Int): Biquad {
-        val f0 = 38.13547087602444
-        val q = 0.5003270373238773
+        val f0 = HIGH_PASS_FREQUENCY_HZ
+        val q = HIGH_PASS_Q
 
         val k = tan(PI * f0 / sampleRate)
         val a0 = 1.0 + k / q + k * k
@@ -168,8 +201,10 @@ public object Loudness {
             val x0 = samples[i].toDouble()
             val y0 = c.b0 * x0 + c.b1 * x1 + c.b2 * x2 - c.a1 * y1 - c.a2 * y2
             out[i] = y0.toFloat()
-            x2 = x1; x1 = x0
-            y2 = y1; y1 = y0
+            x2 = x1
+            x1 = x0
+            y2 = y1
+            y1 = y0
         }
         return out
     }

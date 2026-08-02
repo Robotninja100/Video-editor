@@ -1,53 +1,5 @@
 <?xml version="1.0" ?>
 <SmellBaseline>
   <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>MagicNumber:Color.kt$Argb$0x00FFFFFF</ID>
-    <ID>MagicNumber:Color.kt$Argb$24</ID>
-    <ID>MagicNumber:Color.kt$Argb$255f</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.008856</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.0193</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.04045</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.055</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.0722</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.1192</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.1805</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.2126</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.3576</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.4124</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.7152</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.95047</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$0.9505</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$1.055</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$1.08883</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$116.0</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$12.92</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$16.0</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$2.4</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$200.0</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$255.0</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$3.0</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$500.0</ID>
-    <ID>MagicNumber:Color.kt$ColorDifference$7.787</ID>
-    <ID>MagicNumber:Color.kt$Contrast$0.03928</ID>
-    <ID>MagicNumber:Color.kt$Contrast$0.05</ID>
-    <ID>MagicNumber:Color.kt$Contrast$0.055</ID>
-    <ID>MagicNumber:Color.kt$Contrast$0.0722</ID>
-    <ID>MagicNumber:Color.kt$Contrast$0.2126</ID>
-    <ID>MagicNumber:Color.kt$Contrast$0.7152</ID>
-    <ID>MagicNumber:Color.kt$Contrast$0xFF</ID>
-    <ID>MagicNumber:Color.kt$Contrast$1.055</ID>
-    <ID>MagicNumber:Color.kt$Contrast$12.92</ID>
-    <ID>MagicNumber:Color.kt$Contrast$16</ID>
-    <ID>MagicNumber:Color.kt$Contrast$2.4</ID>
-    <ID>MagicNumber:Color.kt$Contrast$24</ID>
-    <ID>MagicNumber:Color.kt$Contrast$255</ID>
-    <ID>MagicNumber:Color.kt$Contrast$255.0</ID>
-    <ID>MagicNumber:Color.kt$Contrast$8</ID>
-    <ID>MagicNumber:Tokens.kt$Tokens.GlassLevel$0xFF000000</ID>
-    <ID>SpacingBetweenDeclarationsWithComments:Tokens.kt$Tokens.Layout$/** Minimale aanraakmaat; kleiner is op een telefoon niet te bedienen. */</ID>
-    <ID>SpacingBetweenDeclarationsWithComments:Tokens.kt$Tokens.Radius$/** Voor pillen en knoppen die volledig rond moeten zijn. */</ID>
-    <ID>SpacingBetweenDeclarationsWithComments:Tokens.kt$Tokens.Track$/** Magenta en niet paars: paars ligt in Lab-ruimte te dicht bij het blauw. */</ID>
-    <ID>SpacingBetweenDeclarationsWithComments:Tokens.kt$Tokens.Type.Mono$/** Voor timecodes; tabulaire cijfers zodat ze niet verspringen. */</ID>
-  </CurrentIssues>
+  <CurrentIssues/>
 </SmellBaseline>

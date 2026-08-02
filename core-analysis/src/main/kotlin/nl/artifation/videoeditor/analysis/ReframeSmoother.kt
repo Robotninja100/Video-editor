@@ -4,10 +4,10 @@ import nl.artifation.videoeditor.model.Keyframe
 import nl.artifation.videoeditor.model.NormRect
 import nl.artifation.videoeditor.model.US_PER_SECOND
 import nl.artifation.videoeditor.model.Us
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.PI
 
 /**
  * Auto-reframe: van detecties naar een rustig cropkeyframe-pad.
@@ -29,7 +29,7 @@ public data class Detection(
 
 public data class ReframeConfig(
     /** Doelverhouding breedte/hoogte. 9:16 = 0.5625. */
-    val targetAspect: Float = 9f / 16f,
+    val targetAspect: Float = PORTRAIT_WIDTH / PORTRAIT_HEIGHT,
     /** Hoe snel de crop de doelpositie volgt, in Hz. Lager = rustiger, trager. */
     val smoothingHz: Float = 1.2f,
     /** Beweging kleiner dan deze fractie van de framebreedte wordt genegeerd. */
@@ -43,9 +43,21 @@ public data class ReframeConfig(
         require(deadzoneFrac >= 0f) { "deadzoneFrac moet >= 0 zijn" }
         require(stepUs > 0L) { "stepUs moet positief zijn" }
     }
+
+    public companion object {
+        /** 9:16 — het formaat waar dit hele mechanisme voor bestaat. */
+        public const val PORTRAIT_WIDTH: Float = 9f
+        public const val PORTRAIT_HEIGHT: Float = 16f
+    }
 }
 
 public object ReframeSmoother {
+
+    /** Het midden van het frame; waar de crop staat als er niets gedetecteerd is. */
+    private const val FRAME_CENTER = 0.5f
+
+    /** Ondergrens voor het gewicht van een box, zodat een lege box niet door nul deelt. */
+    private const val MIN_BOX_WEIGHT = 1e-6f
 
     /**
      * Lost het cropppad op.
@@ -67,7 +79,7 @@ public object ReframeSmoother {
         val cuts = sceneCutsUs.sorted()
 
         // Doelcentrum per sample; frames zonder detectie houden het vorige doel vast.
-        var heldTarget = samples.firstNotNullOfOrNull { centroid(it.boxes) } ?: Point(0.5f, 0.5f)
+        var heldTarget = samples.firstNotNullOfOrNull { centroid(it.boxes) } ?: Point(FRAME_CENTER, FRAME_CENTER)
         var position = heldTarget
         var velocity = Point(0f, 0f)
 
@@ -125,7 +137,7 @@ public object ReframeSmoother {
         var x = 0f
         var y = 0f
         for (box in boxes) {
-            val weight = max(1e-6f, box.width * box.height)
+            val weight = max(MIN_BOX_WEIGHT, box.width * box.height)
             x += box.centerX * weight
             y += box.centerY * weight
             weightSum += weight

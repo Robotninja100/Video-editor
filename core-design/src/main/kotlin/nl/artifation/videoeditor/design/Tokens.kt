@@ -24,6 +24,9 @@ public object Tokens {
         public val backdrop: Argb = Argb.of(0xFF07070A)
         public val backdropRaised: Argb = Argb.of(0xFF0E0E13)
 
+        /** Dekkend zwart; alleen als basis voor de scrim, nooit als vlakkleur. */
+        public val black: Argb = Argb.of(0xFF000000)
+
         public val textPrimary: Argb = Argb.of(0xFFFFFFFF)
         public val textSecondary: Argb = Argb.of(0xB3FFFFFF)
         public val textTertiary: Argb = Argb.of(0x73FFFFFF)
@@ -45,6 +48,7 @@ public object Tokens {
         public val video: Argb = Argb.of(0xFF0A84FF)
         public val audio: Argb = Argb.of(0xFF30D158)
         public val caption: Argb = Argb.of(0xFFFF9F0A)
+
         /** Magenta en niet paars: paars ligt in Lab-ruimte te dicht bij het blauw. */
         public val mask: Argb = Argb.of(0xFFF25CC1)
 
@@ -85,7 +89,7 @@ public object Tokens {
         ;
 
         /** De scrim die daadwerkelijk over de achtergrond gaat. */
-        public fun scrim(): Argb = Argb.of(0xFF000000).withAlpha(scrimAlpha)
+        public fun scrim(): Argb = Palette.black.withAlpha(scrimAlpha)
 
         public fun sheen(): Argb = Palette.textPrimary.withAlpha(sheenAlpha)
 
@@ -112,6 +116,7 @@ public object Tokens {
         public const val MEDIUM: Int = 14
         public const val LARGE: Int = 22
         public const val SHEET: Int = 28
+
         /** Voor pillen en knoppen die volledig rond moeten zijn. */
         public const val FULL: Int = 999
 
@@ -125,6 +130,7 @@ public object Tokens {
         Headline(17, 22, 600),
         Body(15, 20, 400),
         Label(13, 17, 500),
+
         /** Voor timecodes; tabulaire cijfers zodat ze niet verspringen. */
         Mono(12, 16, 500),
         ;
@@ -157,6 +163,7 @@ public object Tokens {
         public const val RULER_HEIGHT_DP: Int = 28
         public const val TOOLBAR_HEIGHT_DP: Int = 56
         public const val PLAYHEAD_WIDTH_DP: Int = 2
+
         /** Minimale aanraakmaat; kleiner is op een telefoon niet te bedienen. */
         public const val MIN_TOUCH_DP: Int = 44
     }
