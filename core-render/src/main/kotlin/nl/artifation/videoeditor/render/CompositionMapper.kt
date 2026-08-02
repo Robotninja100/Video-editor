@@ -2,11 +2,17 @@ package nl.artifation.videoeditor.render
 
 import android.net.Uri
 import androidx.media3.common.C
+import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.Contrast
 import androidx.media3.effect.Crop
+import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.Presentation
+import androidx.media3.effect.RgbAdjustment
+import androidx.media3.effect.TextureOverlay
+import com.google.common.collect.ImmutableList
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -17,6 +23,7 @@ import nl.artifation.videoeditor.model.PlannedEffect
 import nl.artifation.videoeditor.model.PlannedGap
 import nl.artifation.videoeditor.model.PlannedSequence
 import nl.artifation.videoeditor.model.US_PER_MS
+import kotlin.math.pow
 
 /**
  * Het enige koppelvlak met Media3.
@@ -85,11 +92,28 @@ public class CompositionMapper {
                         ),
                     )
 
-                    // Nog te implementeren; expliciet en niet stilzwijgend genegeerd,
-                    // zodat een ontbrekend effect opvalt in plaats van te verdwijnen.
-                    is PlannedEffect.AnimatedCrop -> TODO("keyframed crop — fase 5")
-                    is PlannedEffect.Captions -> TODO("caption overlays — fase 3")
-                    is PlannedEffect.ColorAdjust -> TODO("kleurcorrectie — fase 7")
+                    is PlannedEffect.AnimatedCrop -> add(
+                        AnimatedCropEffect(path = effect.path, clip = clip),
+                    )
+
+                    is PlannedEffect.Captions -> add(
+                        OverlayEffect(
+                            // Expliciet getypeerd: `ImmutableList.of(overlay)` zou
+                            // een lijst van de subklasse opleveren, en Java-generics
+                            // accepteren die niet waar een lijst van de interface staat.
+                            ImmutableList.of<TextureOverlay>(
+                                CaptionOverlay(
+                                    cues = effect.cues,
+                                    style = effect.style,
+                                    clip = clip,
+                                    frameWidth = plan.outputSpec.width,
+                                    frameHeight = plan.outputSpec.height,
+                                ),
+                            ),
+                        ),
+                    )
+
+                    is PlannedEffect.ColorAdjust -> addAll(colorEffects(effect))
                 }
             }
 
@@ -110,6 +134,33 @@ public class CompositionMapper {
     }
 
     /**
+     * Belichting en contrast als twee losse effecten.
+     *
+     * Media3 heeft geen enkel effect dat beide doet, en dat is maar goed ook: een
+     * effect dat niets verandert hoort er niet te staan. Een lege lijst laat het
+     * beeld dus letterlijk met rust.
+     *
+     * Belichting wordt in stops uitgedrukt, zoals in een camera: +1 is twee keer
+     * zoveel licht. Dat is een vermenigvuldiging van de kanalen, niet een optelling
+     * — die zou de zwarten grijs maken.
+     */
+    private fun colorEffects(effect: PlannedEffect.ColorAdjust): List<Effect> = buildList {
+        if (effect.exposure != 0f) {
+            val factor = STOP_BASE.pow(effect.exposure)
+            add(
+                RgbAdjustment.Builder()
+                    .setRedScale(factor)
+                    .setGreenScale(factor)
+                    .setBlueScale(factor)
+                    .build(),
+            )
+        }
+        if (effect.contrast != 0f) {
+            add(Contrast(effect.contrast))
+        }
+    }
+
+    /**
      * `setSpeed` neemt geen getal maar een [SpeedProvider].
      *
      * Media3 staat een snelheidsverloop bínnen één clip toe en vraagt daarom per
@@ -126,4 +177,9 @@ public class CompositionMapper {
                 override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = C.TIME_UNSET
             }
         }
+
+    private companion object {
+        /** Eén stop belichting is een verdubbeling. */
+        const val STOP_BASE = 2f
+    }
 }
