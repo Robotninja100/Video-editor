@@ -26,7 +26,7 @@ Tien modules gebouwd en getest; twee compleet geschreven maar nooit gecompileerd
 | `:core-render` | 📝 compleet, niet gebouwd | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder` |
 | `:app` | 📝 compleet, niet gebouwd | Activity, state-houder, glas-UI, tijdlijn-canvas, resources |
 
-Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **739 tests** zonder
+Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **785 tests** zonder
 emulator of toestel, en dat dekt precies waar stille regressies zitten:
 tijdlijnrekenwerk, DSP, coördinaatomrekening, toestandsmachines en het parsen van
 antwoorden van diensten die je niet in de hand hebt.
@@ -44,9 +44,11 @@ integratietests dat ze samen doen wat de bedoeling is.
 ./gradlew :core-model:test
 ```
 
-Regeldekking is 95,1%, vertakkingsdekking 66,1%; de ondergrens staat op 90%
-regeldekking. Detekt draait met een basislijn per module in `config/detekt/`:
-bestaande overtredingen zijn bevroren, nieuwe worden tegengehouden.
+De ondergrens staat op 90% regeldekking. Detekt draait met een basislijn per
+module in `config/detekt/`, en **alle tien staan leeg**. Dat is het punt: een
+bevroren basislijn is prima voor een dag, maar daarna verdwijnt elk nieuw
+probleem tussen de oude. Waar een regel wél klopt maar het geval niet, staat een
+`@Suppress` met de reden in de code — lokaal, leesbaar, en het verjaart niet.
 
 ### De app bouwen — dit moet op jouw machine
 
