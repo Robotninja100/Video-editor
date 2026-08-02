@@ -119,11 +119,26 @@ public fun EditorScreen(
             }
         }
 
-        if (state.analysis != null) {
-            // Overlay: analyse duurt minuten en verdient de aandacht die het opeist.
-            AnalysisSheet(
+        // Analyse gaat voor: die blokkeert het monteren, een export niet. Twee
+        // panelen over elkaar heen is geen keuze maar een ongeluk.
+        when {
+            state.analysis != null -> AnalysisSheet(
                 progress = state.analysis,
                 onCancel = actions.onCancelAnalysis,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+
+            state.export != null -> ExportSheet(
+                status = state.export,
+                onCancel = actions.onCancelExport,
+                onDismiss = actions.onDismissExport,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+
+            state.silenceProposal != null -> ProposalSheet(
+                proposal = state.silenceProposal,
+                onApply = actions.onApplySilenceCut,
+                onDismiss = actions.onDismissProposal,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -146,6 +161,27 @@ public data class EditorState(
     val analysis: AnalysisProgress?,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
+    /** Er staat een clip geselecteerd die weg kan. */
+    val canDelete: Boolean = false,
+    /** `null` zolang er niets te melden valt over een export. */
+    val export: ExportStatus? = null,
+    /** Het resultaat van de stilte-analyse, zolang het nog niet is toegepast. */
+    val silenceProposal: SilenceProposal? = null,
+)
+
+/**
+ * Wat de analyse voorstelt, in termen waar je iets aan hebt.
+ *
+ * Niet de stiltes zelf maar wat ze opleveren: hoeveel er weggaat en hoeveel er
+ * overblijft. "Zeventien stiltes gevonden" is een meting; "tweeënhalve minuut
+ * korter" is een reden om op ja te drukken.
+ */
+public data class SilenceProposal(
+    val silenceCount: Int,
+    val removedUs: Us,
+    val resultingDurationUs: Us,
+    /** De stukken die blijven; hiermee wordt de tijdlijn opnieuw opgebouwd. */
+    val keepIntervals: List<LongRange>,
 )
 
 public data class AnalysisProgress(
@@ -155,6 +191,23 @@ public data class AnalysisProgress(
     val estimatedUsd: Double?,
 )
 
+/**
+ * De drie dingen die een export over zichzelf te melden heeft.
+ *
+ * Als aparte toestanden en niet als één klasse met lege velden: een export die
+ * klaar is heeft geen percentage, en een die mislukt is heeft geen bestand. Dat
+ * in één type proppen betekent dat elke plek die het leest moet raden welke
+ * velden nu gevuld zijn.
+ */
+public sealed interface ExportStatus {
+
+    public data class Running(val percent: Int) : ExportStatus
+
+    public data class Done(val outputPath: String) : ExportStatus
+
+    public data class Failed(val message: String) : ExportStatus
+}
+
 public data class EditorActions(
     val onScrub: (Us) -> Unit,
     val onSelect: (String?) -> Unit,
@@ -163,4 +216,15 @@ public data class EditorActions(
     val onCancelAnalysis: () -> Unit,
     val onUndo: () -> Unit,
     val onRedo: () -> Unit,
+    /** Knipt alle sporen door op de playhead. */
+    val onSplit: () -> Unit,
+    val onDelete: () -> Unit,
+    val onExport: () -> Unit,
+    val onCancelExport: () -> Unit,
+    /** Sluit het paneel na een geslaagde of mislukte export. */
+    val onDismissExport: () -> Unit,
+    /** Zoekt de stiltes in het bronmateriaal. */
+    val onAnalyzeAudio: () -> Unit,
+    val onApplySilenceCut: () -> Unit,
+    val onDismissProposal: () -> Unit,
 )

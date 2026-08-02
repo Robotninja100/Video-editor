@@ -12,9 +12,16 @@ import nl.artifation.videoeditor.model.Sequence
 import nl.artifation.videoeditor.model.TimelineGeometry
 import nl.artifation.videoeditor.model.UndoStack
 import nl.artifation.videoeditor.model.Us
+import nl.artifation.videoeditor.analysis.AudioAnalysis
 import nl.artifation.videoeditor.model.moveClipTo
+import nl.artifation.videoeditor.model.rippleDelete
+import nl.artifation.videoeditor.model.sequenceFromIntervals
+import nl.artifation.videoeditor.model.splitAt
+import nl.artifation.videoeditor.ui.AnalysisProgress
 import nl.artifation.videoeditor.ui.EditorActions
 import nl.artifation.videoeditor.ui.EditorState
+import nl.artifation.videoeditor.ui.ExportStatus
+import nl.artifation.videoeditor.ui.SilenceProposal
 
 /**
  * De brug tussen de pure modules en het scherm.
@@ -44,6 +51,29 @@ public class EditorViewModel(
     public var scrollPx: Float by mutableStateOf(0f)
         private set
 
+    public var exportStatus: ExportStatus? by mutableStateOf<ExportStatus?>(null)
+        private set
+
+    public var analysisProgress: AnalysisProgress? by mutableStateOf<AnalysisProgress?>(null)
+        private set
+
+    public var silenceProposal: SilenceProposal? by mutableStateOf<SilenceProposal?>(null)
+        private set
+
+    /** De bron waar de analyse over ging; nodig om de tijdlijn opnieuw op te bouwen. */
+    public val sourceUri: String?
+        get() = project.mainSequence.items.filterIsInstance<Clip>().firstOrNull()?.sourceUri
+
+    /**
+     * De volle duur van het bronbestand, vastgelegd bij het openen.
+     *
+     * Dient als revisienummer voor de sidecar. Bewust niet de projectduur: die
+     * verandert zodra je iets wegknipt, en dan zou elke montage de analyse
+     * ongeldig maken terwijl het bronmateriaal hetzelfde is gebleven.
+     */
+    public var sourceRevision: Us = 0L
+        private set
+
     private var revisie: Int by mutableStateOf(0)
 
     /** Het project zoals het nu is; `revisie` maakt het leesbaar voor Compose. */
@@ -57,10 +87,7 @@ public class EditorViewModel(
     public val canRedo: Boolean get() = run { revisie; history.canRedo }
 
     @UnstableApi
-    public fun state(
-        player: Player?,
-        analysis: nl.artifation.videoeditor.ui.AnalysisProgress?,
-    ): EditorState =
+    public fun state(player: Player?): EditorState =
         EditorState(
             project = project,
             playheadUs = playheadUs,
@@ -68,12 +95,23 @@ public class EditorViewModel(
             pxPerSecond = pxPerSecond,
             scrollPx = scrollPx,
             player = player,
-            analysis = analysis,
+            analysis = analysisProgress,
             canUndo = canUndo,
             canRedo = canRedo,
+            canDelete = selectedClipId != null,
+            export = exportStatus,
+            silenceProposal = silenceProposal,
         )
 
-    public fun actions(): EditorActions = EditorActions(
+    /**
+     * @param onExport start de export; die heeft een `Context` nodig en hoort
+     *   daarom niet in een ViewModel thuis. De Activity levert hem aan.
+     */
+    public fun actions(
+        onExport: () -> Unit = {},
+        onCancelExport: () -> Unit = {},
+        onAnalyzeAudio: () -> Unit = {},
+    ): EditorActions = EditorActions(
         onScrub = { playheadUs = it.coerceAtLeast(0L) },
         onSelect = { selectedClipId = it },
         onMove = ::verplaatsClip,
@@ -81,7 +119,130 @@ public class EditorViewModel(
         onCancelAnalysis = { /* de wachtrij annuleert; zie AnalysisService */ },
         onUndo = ::undo,
         onRedo = ::redo,
+        onSplit = ::splitsOpPlayhead,
+        onDelete = ::verwijderSelectie,
+        onExport = onExport,
+        onCancelExport = {
+            onCancelExport()
+            exportStatus = null
+        },
+        onDismissExport = { exportStatus = null },
+        onAnalyzeAudio = onAnalyzeAudio,
+        onApplySilenceCut = ::pasStiltesToe,
+        onDismissProposal = { silenceProposal = null },
     )
+
+    public fun onAnalysisProgress(fraction: Float) {
+        analysisProgress = AnalysisProgress(
+            label = "Stiltes zoeken",
+            fraction = fraction,
+            // Lokale analyse; er gaat geen materiaal naar een dienst en er is
+            // dus niets te betalen. Zie het bouwplan, §Analyse lokaal of in de cloud.
+            estimatedUsd = null,
+        )
+    }
+
+    /**
+     * Verwerkt het analyseresultaat tot een voorstel.
+     *
+     * Zonder stiltes komt er geen paneel: een melding dat er niets te knippen
+     * valt, is een paneel dat je moet wegklikken om te horen dat er niets gebeurt.
+     */
+    public fun onAnalysisCompleted(analysis: AudioAnalysis?) {
+        analysisProgress = null
+
+        val stiltes = analysis?.silences.orEmpty()
+        if (analysis == null || stiltes.isEmpty()) {
+            silenceProposal = null
+            return
+        }
+
+        val keeps = analysis.keepIntervals()
+        val weggehaald = stiltes.sumOf { it.endUs - it.startUs }
+
+        silenceProposal = SilenceProposal(
+            silenceCount = stiltes.size,
+            removedUs = weggehaald,
+            resultingDurationUs = (analysis.durationUs - weggehaald).coerceAtLeast(0L),
+            keepIntervals = keeps,
+        )
+    }
+
+    /**
+     * Bouwt de hoofdtrack opnieuw op uit de stukken die blijven.
+     *
+     * Gaat door de gewone bewerkingsstapel, dus ↶ draait het in één druk terug.
+     * Dat is de reden dat dit een bewerking is en geen aparte modus: een
+     * automatische montage die je niet ongedaan kunt maken, is een gok.
+     */
+    private fun pasStiltesToe() {
+        val proposal = silenceProposal ?: return
+        val bron = sourceUri ?: return
+
+        history.edit { huidig ->
+            huidig.copy(
+                sequences = huidig.sequences.mapIndexed { index, sequence ->
+                    if (index == 0) {
+                        sequenceFromIntervals(sequence.id, bron, proposal.keepIntervals)
+                    } else {
+                        sequence
+                    }
+                },
+            )
+        }
+
+        silenceProposal = null
+        selectedClipId = null
+        playheadUs = 0L
+        revisie++
+    }
+
+    public fun onExportProgress(percent: Int) {
+        exportStatus = ExportStatus.Running(percent)
+    }
+
+    public fun onExportCompleted(outputPath: String) {
+        exportStatus = ExportStatus.Done(outputPath)
+    }
+
+    public fun onExportFailed(message: String) {
+        exportStatus = ExportStatus.Failed(message)
+    }
+
+    /**
+     * Knipt alle sporen door op de playhead.
+     *
+     * Alle sporen en niet alleen het geselecteerde: beeld en geluid horen na een
+     * knip op dezelfde plek te liggen, anders schuift het geluid weg zodra je een
+     * stuk beeld verplaatst. Op een itemgrens doet `splitAt` niets, dus een knip
+     * op een plek waar al geknipt is verandert niets.
+     */
+    private fun splitsOpPlayhead() {
+        history.edit { huidig ->
+            huidig.copy(sequences = huidig.sequences.map { it.splitAt(playheadUs) })
+        }
+        revisie++
+    }
+
+    /**
+     * Haalt de geselecteerde clip weg; alles erachter schuift op.
+     *
+     * Ripple en niet liften: een gat achterlaten waar je net iets weghaalde is
+     * bijna nooit wat je bedoelt, en het gat is met slepen zo terug te maken.
+     */
+    private fun verwijderSelectie() {
+        val id = selectedClipId ?: return
+        history.edit { huidig ->
+            huidig.copy(
+                sequences = huidig.sequences.map { sequence ->
+                    val index = sequence.items.indexOfFirst { it is Clip && it.id == id }
+                    if (index < 0) sequence else sequence.rippleDelete(index)
+                },
+            )
+        }
+        selectedClipId = null
+        revisie++
+    }
 
     /**
      * Zet een gekozen video als enige clip op de videotrack.
@@ -106,6 +267,8 @@ public class EditorViewModel(
         }
         playheadUs = 0L
         selectedClipId = "clip-1"
+        sourceRevision = durationUs
+        silenceProposal = null
         revisie++
     }
 

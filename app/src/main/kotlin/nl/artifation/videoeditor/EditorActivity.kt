@@ -15,15 +15,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import nl.artifation.videoeditor.analysis.AudioAnalysisController
 import nl.artifation.videoeditor.model.US_PER_MS
 import nl.artifation.videoeditor.model.Us
+import nl.artifation.videoeditor.render.Exporter
 import nl.artifation.videoeditor.ui.EditorScreen
+import java.security.MessageDigest
 
 /**
  * Het enige scherm van de app.
@@ -43,18 +48,57 @@ public class EditorActivity : ComponentActivity() {
 
         setContent {
             val model: EditorViewModel = viewModel()
+            val context = LocalContext.current
+            val export = remember(context) { ExportController(context) }
+
+            // Vasthouden aan het model en niet aan de compositie: de listener
+            // wordt door Media3 aangeroepen, mogelijk nadat dit scherm al opnieuw
+            // is opgebouwd.
+            val exportListener = remember(model) {
+                object : Exporter.Listener {
+                    override fun onProgress(percent: Int) = model.onExportProgress(percent)
+
+                    override fun onCompleted(outputPath: String) =
+                        model.onExportCompleted(outputPath)
+
+                    override fun onFailed(cause: Throwable) =
+                        model.onExportFailed(cause.message ?: "onbekende fout")
+                }
+            }
 
             // Zonder materiaal is er niets te monteren, dus de kiezer komt
             // meteen. Een lege tijdlijn tonen en wachten tot iemand een knop
             // vindt is geen begin, dat is een doodlopend scherm.
             GekozenVideo { uri, durationUs -> model.openClip(uri.toString(), durationUs) }
 
+            val analyse = remember(context) { AudioAnalysisController(context) }
+            val scope = rememberCoroutineScope()
+
             EditorScreen(
-                state = model.state(
-                    player = rememberPreviewPlayer(model.project),
-                    analysis = null,
+                state = model.state(player = rememberPreviewPlayer(model.project)),
+                actions = model.actions(
+                    onExport = {
+                        model.onExportProgress(0)
+                        export.start(model.project, exportListener)
+                    },
+                    onCancelExport = export::cancel,
+                    onAnalyzeAudio = {
+                        val bron = model.sourceUri
+                        if (bron != null) {
+                            model.onAnalysisProgress(0f)
+                            scope.launch {
+                                model.onAnalysisCompleted(
+                                    analyse.analyze(
+                                        assetId = assetIdVan(bron),
+                                        uri = Uri.parse(bron),
+                                        sourceRevision = model.sourceRevision,
+                                        onProgress = model::onAnalysisProgress,
+                                    ),
+                                )
+                            }
+                        }
+                    },
                 ),
-                actions = model.actions(),
             )
         }
     }
@@ -93,6 +137,22 @@ private fun GekozenVideo(onGekozen: (Uri, Us) -> Unit) {
         if (durationUs > 0L) onGekozen(uri, durationUs)
     }
 }
+
+/**
+ * Een asset-id dat als mapnaam kan dienen.
+ *
+ * Een content-uri zit vol tekens die geen bestandsnaam mogen zijn, en
+ * `SidecarPaths` weigert padscheidingen — terecht, want daarmee zou een uri
+ * kunnen bepalen waar er geschreven wordt. Een hash lost beide op en is stabiel
+ * over sessies heen, wat nodig is om de analyse te kunnen hergebruiken.
+ */
+private fun assetIdVan(sourceUri: String): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(sourceUri.toByteArray())
+        .joinToString("") { "%02x".format(it) }
+        .take(ASSET_ID_LENGTE)
+
+private const val ASSET_ID_LENGTE = 32
 
 /** De duur in microseconden, of 0 als het bestand niets bruikbaars meldt. */
 private fun durationUsOf(context: Context, uri: Uri): Us {

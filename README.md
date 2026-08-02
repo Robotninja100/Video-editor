@@ -14,20 +14,20 @@ hebben gedraaid.
 
 | Module | Status | Inhoud |
 |---|---|---|
-| `:core-model` | ✅ | Timeline, bewerkingen, rendercontract, tijdlijn-geometrie, undo, persistentie |
-| `:core-analysis` | ✅ | Stiltes, scenes, reframe-smoothing, EBU R128-loudness, captions, cut-list |
+| `:core-model` | ✅ | Timeline, bewerkingen, rendercontract, tijdlijn-geometrie, undo, persistentie, exportpresets |
+| `:core-analysis` | ✅ | Stiltes, scenes, reframe-smoothing, EBU R128-loudness, captions, cut-list, audio-sidecar |
 | `:core-remote` | ✅ | Transcriptie, segmentatie + RLE, auto-edit — contracten en parsing |
 | `:core-design` | ✅ | Glaslagen, palet, schalen, contrast- en ΔE-validatie |
-| `:core-library` | ✅ | Mediacatalogus, sidecar-paden, verouderingslogica |
+| `:core-library` | ✅ | Mediacatalogus, sidecar-paden en -opslag, verouderingslogica |
 | `:core-project` | ✅ | Projectopslag, schemamigratie, autosave, crashherstel |
 | `:core-jobs` | ✅ | Wachtrij, toestandsmachine, backoff, voortgang |
 | `:core-errors` | ✅ | Foutentaxonomie, retry-beleid, gebruikersteksten |
 | `:core-thermal` | ✅ | Thermisch beleid, hysterese, blokplanner |
 | `:core-pipeline` | ✅ | **De koppeling**: thermische rem op de wachtrij, analyseplanner, integratietests |
-| `:core-render` | 🔨 bouwt in CI | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder` |
+| `:core-render` | 🔨 bouwt in CI | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder`, `Exporter`, caption- en cropeffecten |
 | `:app` | 🔨 bouwt in CI | Activity, state-houder, glas-UI, tijdlijn-canvas, resources |
 
-Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **786 tests** zonder
+Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **842 tests** zonder
 emulator of toestel, en dat dekt precies waar stille regressies zitten:
 tijdlijnrekenwerk, DSP, coördinaatomrekening, toestandsmachines en het parsen van
 antwoorden van diensten die je niet in de hand hebt.
@@ -41,7 +41,7 @@ integratietests dat ze samen doen wat de bedoeling is.
 
 ```bash
 ./gradlew controle      # statische analyse, alle tests, dekkingsrapport
-./gradlew test          # alleen de unittests (786, pure JVM)
+./gradlew test          # alleen de unittests (842, pure JVM)
 ./gradlew :core-model:test
 ```
 
@@ -71,7 +71,7 @@ adb install app-debug.apk
 ```
 
 Zonder SDK blijven `:app` en `:core-render` buiten de build en draaien de
-786 JVM-tests gewoon. Dat is geen theoretisch geval: de omgeving waarin deze code
+842 JVM-tests gewoon. Dat is geen theoretisch geval: de omgeving waarin deze code
 geschreven is kan `maven.google.com` en `dl.google.com` niet bereiken —
 geblokkeerd op organisatiebeleid — en heeft alleen SDK-platform **API 23**,
 terwijl dit project minSdk 31 vraagt. Vandaar de derde CI-job: die runner mag wél
@@ -89,7 +89,24 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 Bij het starten vraagt hij om een video, zet die als clip op de tijdlijn en
 speelt hem af met `CompositionPlayer` — precies het rondje dat fase 0 moet
 bewijzen. Monteren zelf (knippen, slepen, effecten) zit in het model en in de
-tijdlijn-UI, maar loopt nog niet door naar de export.
+tijdlijn-UI.
+
+De audioknop in de gereedschapskolom analyseert het bronmateriaal: audio
+decoderen, stiltes zoeken en de loudness meten. Het resultaat gaat in een
+sidecar naast de bron, dus een tweede keer is gratis. Daarna verschijnt er een
+voorstel — "zeventien stiltes, 2:31 korter" — dat je kunt toepassen of laten
+liggen. Toepassen is een gewone bewerking, dus ↶ draait het terug.
+
+Knippen op de playhead, de geselecteerde clip verwijderen, ongedaan maken en
+exporteren zitten in de bovenbalk. De exportknop schrijft hetzelfde renderplan
+weg dat de preview afspeelt, met voortgang en annuleren, en met de bitrate uit
+een `ExportPreset` die uit het project zelf wordt afgeleid. Preview en export
+delen daarmee de complete effectketen — precies de opzet waarvan fase 0 moet
+aantonen dat hij ook echt hetzelfde beeld oplevert.
+
+Het bestand komt in de app-map (`Android/data/…/files/Movies`), niet in de
+galerij: wegschrijven naar MediaStore vraagt om keuzes over mislukte exports die
+bij de afwerking horen.
 
 **Dat hij compileert betekent niet dat hij werkt.** Er is nooit een frame op een
 toestel gerenderd. Wel is elke Media3-aanroep nagelezen tegen de **bron van

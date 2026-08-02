@@ -54,24 +54,40 @@ public fun Toolbar(
             )
         }
 
-        // Ongedaan maken hoort in de balk en niet in een menu: bij monteren is
-        // het de meest gebruikte handeling die er is.
-        HistorieKnop("↶", state.canUndo, actions.onUndo)
-        HistorieKnop("↷", state.canRedo, actions.onRedo)
+        // Knippen op de playhead is bij monteren de handeling die je het vaakst
+        // doet, dus die staat in de balk en niet achter een menu.
+        BalkKnop("✂", enabled = true, onClick = actions.onSplit)
+        BalkKnop("⌫", enabled = state.canDelete, onClick = actions.onDelete)
 
+        // Ongedaan maken hoort er direct naast: knippen is de handeling die je
+        // het vaakst terugdraait.
+        BalkKnop("↶", state.canUndo, actions.onUndo)
+        BalkKnop("↷", state.canRedo, actions.onRedo)
+
+        val exporteert = state.export is ExportStatus.Running
         Text(
-            text = "Exporteer",
+            text = if (exporteert) "Bezig…" else "Exporteer",
             color = Color.White,
             fontSize = Tokens.Type.Label.sizeSp.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
                 .clip(RoundedCornerShape(Tokens.Radius.FULL.dp))
-                .background(Tokens.Palette.accent.toColor())
-                .clickable { /* fase 1: export starten */ }
+                .background(
+                    if (exporteert) {
+                        Tokens.Palette.accent.withAlpha(UITGEGRIJSD_ALPHA).toColor()
+                    } else {
+                        Tokens.Palette.accent.toColor()
+                    },
+                )
+                // Tijdens een lopende export niet klikbaar: twee keer starten zou
+                // op een `check` in de Exporter stuklopen.
+                .clickable(enabled = !exporteert, onClick = actions.onExport)
                 .padding(horizontal = Tokens.Space.L.dp, vertical = Tokens.Space.S.dp),
         )
     }
 }
+
+private const val UITGEGRIJSD_ALPHA = 0.4f
 
 /**
  * Een knop die uitgegrijsd is wanneer er niets te doen valt.
@@ -80,7 +96,7 @@ public fun Toolbar(
  * onvoorspelbaar, en je duim leert de plek af.
  */
 @Composable
-private fun HistorieKnop(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+private fun BalkKnop(glyph: String, enabled: Boolean, onClick: () -> Unit) {
     Text(
         text = glyph,
         color = if (enabled) {
@@ -109,29 +125,43 @@ public fun ToolRail(
     actions: EditorActions,
     modifier: Modifier = Modifier,
 ) {
+    // Alleen het audiogereedschap doet iets: dat is fase 2 en die is af. De rest
+    // staat er al wel, zodat de kolom niet bij elke fase van vorm verandert.
     val tools = listOf(
-        "◎" to Tokens.Track.mask,
-        "T" to Tokens.Track.caption,
-        "⌗" to Tokens.Track.video,
-        "◐" to Tokens.Track.audio,
+        Tool("◎", Tokens.Track.mask, null),
+        Tool("T", Tokens.Track.caption, null),
+        Tool("⌗", Tokens.Track.video, null),
+        Tool("◐", Tokens.Track.audio, actions.onAnalyzeAudio),
     )
 
     Column(
         modifier = modifier.padding(Tokens.Space.XS.dp),
         verticalArrangement = Arrangement.spacedBy(Tokens.Space.XS.dp),
     ) {
-        for ((glyph, kleur) in tools) {
+        for (tool in tools) {
+            val actief = tool.onClick != null && state.analysis == null
             Text(
-                text = glyph,
-                color = kleur.toColor(),
+                text = tool.glyph,
+                color = if (actief) {
+                    tool.kleur.toColor()
+                } else {
+                    tool.kleur.withAlpha(UITGEGRIJSD_ALPHA).toColor()
+                },
                 fontSize = Tokens.Type.Headline.sizeSp.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .size(Tokens.Layout.MIN_TOUCH_DP.dp)
                     .clip(RoundedCornerShape(Tokens.Radius.FULL.dp))
-                    .clickable { /* fase 3 t/m 6: het bijbehorende gereedschap */ }
+                    .clickable(enabled = actief) { tool.onClick?.invoke() }
                     .padding(Tokens.Space.S.dp),
             )
         }
     }
 }
+
+private data class Tool(
+    val glyph: String,
+    val kleur: nl.artifation.videoeditor.design.Argb,
+    /** `null` betekent: dit gereedschap bestaat nog niet. */
+    val onClick: (() -> Unit)?,
+)

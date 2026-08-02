@@ -41,6 +41,8 @@ android {
 dependencies {
     implementation(project(":core-model"))
     implementation(project(":core-analysis"))
+    // Sidecar-paden en -opslag: de analyse legt haar resultaat hier vast.
+    implementation(project(":core-library"))
     implementation(project(":core-remote"))
     implementation(project(":core-design"))
     implementation(project(":core-render"))
