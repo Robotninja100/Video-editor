@@ -214,3 +214,84 @@ class UndoStackTest {
         assertTrue(stack.canUndo)
     }
 }
+
+/**
+ * De masktrack moet synchroon meelopen met het bronmateriaal. Twee dingen konden
+ * daarbij misgaan, en gingen ook mis: de in-point van een getrimde clip, en de
+ * snelheid. Die laatste ontbrak volledig, waardoor de blur bij 2× lineair
+ * wegliep van het onderwerp.
+ */
+class BronPositieTest {
+
+    private fun planned(
+        inPointUs: Us = 0L,
+        outPointUs: Us = 60_000_000L,
+        speed: Float = 1f,
+    ) = PlannedClip(
+        sourceUri = "file:///a.mp4",
+        inPointUs = inPointUs,
+        outPointUs = outPointUs,
+        speed = speed,
+        effects = emptyList(),
+        durationUs = ((outPointUs - inPointUs) / speed).toLong(),
+    )
+
+    @Test
+    fun `op normale snelheid loopt de bron gelijk op met de uitvoer`() {
+        val clip = planned()
+
+        assertEquals(0L, clip.sourcePtsFor(0L))
+        assertEquals(5_000_000L, clip.sourcePtsFor(5_000_000L))
+    }
+
+    @Test
+    fun `op dubbele snelheid ligt uitvoer van vijf seconden op bron tien`() {
+        val clip = planned(speed = 2f)
+
+        assertEquals(
+            10_000_000L,
+            clip.sourcePtsFor(5_000_000L),
+            "zonder deze factor loopt de blur vijf seconden achter",
+        )
+    }
+
+    @Test
+    fun `op halve snelheid loopt de bron half zo snel`() {
+        assertEquals(2_500_000L, planned(speed = 0.5f).sourcePtsFor(5_000_000L))
+    }
+
+    @Test
+    fun `een getrimde clip telt zijn in-point erbij`() {
+        val clip = planned(inPointUs = 5_000_000L)
+
+        assertEquals(
+            5_000_000L,
+            clip.sourcePtsFor(0L),
+            "op uitvoertijd nul hoort de mask van het in-point",
+        )
+        assertEquals(7_000_000L, clip.sourcePtsFor(2_000_000L))
+    }
+
+    @Test
+    fun `in-point en snelheid werken samen`() {
+        val clip = planned(inPointUs = 5_000_000L, speed = 2f)
+
+        assertEquals(15_000_000L, clip.sourcePtsFor(5_000_000L))
+    }
+
+    @Test
+    fun `de bronpositie gaat nooit voorbij het einde van de clip`() {
+        val clip = planned(inPointUs = 1_000_000L, outPointUs = 3_000_000L)
+
+        assertEquals(
+            3_000_000L,
+            clip.sourcePtsFor(99_000_000L),
+            "voorbij het einde staat geen mask; de decoder zou doorspoelen",
+        )
+    }
+
+    @Test
+    fun `een negatieve uitvoertijd levert het in-point op`() {
+        assertEquals(1_000_000L, planned(inPointUs = 1_000_000L).sourcePtsFor(-5_000L))
+    }
+}

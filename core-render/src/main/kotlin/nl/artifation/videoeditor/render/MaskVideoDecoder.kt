@@ -132,11 +132,14 @@ internal class MaskVideoDecoder(
     }
 
     fun release() {
+        // Alles apart: gooit er één, dan moeten de andere alsnog vrijkomen.
+        // Surface en SurfaceTexture stonden hier kaal, dus een fout in de eerste
+        // liet de tweede voorgoed hangen.
         runCatching { codec.stop() }
         runCatching { codec.release() }
         runCatching { extractor.release() }
-        surface.release()
-        surfaceTexture.release()
+        runCatching { surface.release() }
+        runCatching { surfaceTexture.release() }
     }
 
     companion object {
@@ -144,27 +147,49 @@ internal class MaskVideoDecoder(
         private const val FRAME_WAIT_MS = 500L
 
         /**
-         * Opent de masktrack en configureert de decoder om naar [textureId] te renderen.
+         * Opent de masktrack en configureert de decoder om naar [textureId] te
+         * renderen.
+         *
+         * Alles wat onderweg wordt aangemaakt, wordt bij een fout weer
+         * vrijgegeven. Zonder dat lekt een maskbestand zonder videotrack de
+         * `MediaExtractor` (een native bestandsdescriptor), en een geweigerde
+         * `configure` — onbekend profiel, of alle hardware-decoders al bezet —
+         * lekt daarnaast de `SurfaceTexture`, de `Surface` en de `MediaCodec`.
+         * Deze functie draait per renderpas, dus opnieuw proberen put de
+         * decoders anders uit.
          */
         fun open(uri: Uri, textureId: Int, openExtractor: (Uri) -> MediaExtractor): MaskVideoDecoder {
-            val extractor = openExtractor(uri)
+            var extractor: MediaExtractor? = null
+            var surfaceTexture: SurfaceTexture? = null
+            var surface: Surface? = null
+            var codec: MediaCodec? = null
 
-            val trackIndex = (0 until extractor.trackCount).first { index ->
-                extractor.getTrackFormat(index)
-                    .getString(MediaFormat.KEY_MIME)
-                    ?.startsWith("video/") == true
+            try {
+                extractor = openExtractor(uri)
+
+                val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
+                    extractor.getTrackFormat(index)
+                        .getString(MediaFormat.KEY_MIME)
+                        ?.startsWith("video/") == true
+                } ?: error("maskbestand $uri heeft geen videotrack")
+                extractor.selectTrack(trackIndex)
+
+                val format = extractor.getTrackFormat(trackIndex)
+                surfaceTexture = SurfaceTexture(textureId)
+                surface = Surface(surfaceTexture)
+
+                codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+                codec.configure(format, surface, null, 0)
+                codec.start()
+
+                return MaskVideoDecoder(extractor, codec, surfaceTexture, surface, textureId)
+            } catch (e: Throwable) {
+                runCatching { codec?.release() }
+                runCatching { surface?.release() }
+                runCatching { surfaceTexture?.release() }
+                runCatching { extractor?.release() }
+                throw e
             }
-            extractor.selectTrack(trackIndex)
-
-            val format = extractor.getTrackFormat(trackIndex)
-            val surfaceTexture = SurfaceTexture(textureId)
-            val surface = Surface(surfaceTexture)
-
-            val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
-            codec.configure(format, surface, null, 0)
-            codec.start()
-
-            return MaskVideoDecoder(extractor, codec, surfaceTexture, surface, textureId)
         }
     }
 }

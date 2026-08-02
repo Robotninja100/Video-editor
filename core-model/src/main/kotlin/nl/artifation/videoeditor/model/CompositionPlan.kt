@@ -43,6 +43,34 @@ public data class PlannedClip(
     override val durationUs: Us,
 ) : PlannedItem
 
+/**
+ * Uitvoertijdstip → positie in het bronmateriaal.
+ *
+ * Nodig voor effecten die zelf een tweede bestand synchroon moeten meelezen —
+ * de masktrack van [PlannedEffect.MaskedBlur]. Twee dingen zitten hierin:
+ *
+ * 1. **De in-point.** Sidecars horen bij de bronclip, niet bij de tijdlijn. Een
+ *    clip die op 5 s begint, heeft op uitvoertijd 0 de mask van 5 s nodig.
+ * 2. **De snelheid.** Op 2× hoort uitvoertijd 5 s bij bronpositie 10 s. Zonder
+ *    deze factor loopt de mask lineair weg van waar hij hoort — na vijf seconden
+ *    uitvoer zit de blur vijf seconden naast het onderwerp.
+ *
+ * Deze functie staat hier en niet in de renderlaag omdat het pure rekenkunde is,
+ * en omdat de renderlaag Android nodig heeft om te compileren. Zo ligt de aanname
+ * op één plek vast, met een test eromheen.
+ *
+ * **Nog te bewijzen op een toestel.** Of Media3 de effect-PTS vóór of ná de
+ * snelheidsaanpassing aanlevert, bepaalt of hier vermenigvuldigd of gedeeld moet
+ * worden. Dat hoort bij fase 0, samen met het teken van de in-point en de
+ * preview/export-pariteit. Blijkt het andersom, dan is dit één regel.
+ */
+public fun PlannedClip.sourcePtsFor(effectPtsUs: Us): Us {
+    val offsetUs = (effectPtsUs.coerceAtLeast(0L) * speed).toLong()
+    // Nooit voorbij het einde van de clip: daar staat geen mask meer, en de
+    // decoder zou dan tot het einde van het bestand doorspoelen.
+    return (inPointUs + offsetUs).coerceIn(inPointUs, outPointUs)
+}
+
 public sealed interface PlannedEffect {
 
     /**

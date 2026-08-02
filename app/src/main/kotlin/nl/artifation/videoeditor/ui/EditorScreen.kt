@@ -40,7 +40,14 @@ public fun EditorScreen(
     val density = LocalDensity.current
     val geometry = with(density) {
         TimelineGeometry(
-            pxPerSecond = state.pxPerSecond,
+            // Klemmen, niet doorgeven. `TimelineGeometry` eist pxPerSecond > 0,
+            // en de natuurlijke beginwaarde "nog niet ingezoomd" is nul — dat
+            // zou een IllegalArgumentException vanuit de compositie gooien en
+            // het hele editorscherm slopen in plaats van iets bruikbaars te tonen.
+            pxPerSecond = state.pxPerSecond.coerceIn(
+                TimelineGeometry.MIN_PX_PER_SECOND,
+                TimelineGeometry.MAX_PX_PER_SECOND,
+            ),
             scrollPx = state.scrollPx,
             rulerHeightPx = Tokens.Layout.RULER_HEIGHT_DP.dp.toPx(),
             trackHeightPx = Tokens.Layout.TRACK_HEIGHT_DP.dp.toPx(),

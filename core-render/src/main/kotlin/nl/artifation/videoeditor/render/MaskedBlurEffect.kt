@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.GlEffect
 import androidx.media3.effect.GlShaderProgram
+import nl.artifation.videoeditor.model.PlannedClip
 
 /**
  * Fabriek voor [MaskedBlurShaderProgram].
@@ -22,7 +23,7 @@ internal class MaskedBlurEffect(
     private val context: Context,
     private val maskUri: Uri,
     private val radiusFrac: Float,
-    private val clipInPointUs: Long,
+    private val clip: PlannedClip,
 ) : GlEffect {
 
     override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram =
@@ -30,7 +31,7 @@ internal class MaskedBlurEffect(
             context = context,
             maskUri = maskUri,
             radiusFrac = radiusFrac,
-            clipInPointUs = clipInPointUs,
+            clip = clip,
         ) { uri, textureId ->
             MaskVideoDecoder.open(uri, textureId) { target ->
                 MediaExtractor().apply { setDataSource(context, target, null) }

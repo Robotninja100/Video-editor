@@ -6,17 +6,21 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import nl.artifation.videoeditor.design.Tokens
 import nl.artifation.videoeditor.model.Clip
 import nl.artifation.videoeditor.model.Gap
 import nl.artifation.videoeditor.model.Sequence
+import nl.artifation.videoeditor.model.TimelineGeometry
 import nl.artifation.videoeditor.model.Us
 
 /**
@@ -45,7 +49,12 @@ public fun Timeline(
     onZoom: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var dragging: DragState? = null
+    // `remember` is hier geen stijlkwestie. Een gewone lokale variabele wordt bij
+    // elke compositie opnieuw op null gezet, terwijl de onthouden
+    // `pointerInput`-lambda's de oude referentie vasthouden. Zodra er iets anders
+    // hertekent — de afspeelkop tijdens playback — schrijft het slepen naar een
+    // andere variabele dan het tekenen leest, en is het slepen onzichtbaar.
+    var dragging by remember { mutableStateOf<DragState?>(null) }
 
     Canvas(
         modifier = modifier
@@ -83,7 +92,7 @@ public fun Timeline(
                 )
             },
     ) {
-        drawRuler(geometry)
+        drawRuler(geometry, size.width)
         sequences.forEachIndexed { index, sequence ->
             drawTrack(sequence, index, geometry, selectedClipId, dragging)
         }
@@ -98,9 +107,12 @@ private data class DragState(val hit: TimelineGeometry.Hit, val currentX: Float)
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRuler(
     geometry: TimelineGeometry,
+    visibleWidthPx: Float,
 ) {
     val height = Tokens.Layout.RULER_HEIGHT_DP.dp.toPx()
-    for (tick in geometry.ticks()) {
+    // De liniaal tekent alleen wat in beeld is; zonder de breedte weet
+    // `ticks` niet waar hij moet stoppen.
+    for (tick in geometry.ticks(visibleWidthPx)) {
         val x = geometry.xAt(tick.atUs)
         drawLine(
             color = Color.White.copy(alpha = if (tick.major) 0.28f else 0.12f),
@@ -132,10 +144,14 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTrack(
             is Gap -> Unit // Gaten worden niet getekend; de leegte ís de weergave.
 
             is Clip -> {
-                val beingDragged = dragging?.hit?.sequenceIndex == trackIndex &&
-                    dragging.hit.itemIndex == itemIndex
+                // Eerst vastleggen: Kotlin cast niet slim op een nullable
+                // ontvanger na een vergelijking via een veilige aanroep.
+                val sleep = dragging
+                val beingDragged = sleep != null &&
+                    sleep.hit.sequenceIndex == trackIndex &&
+                    sleep.hit.itemIndex == itemIndex
 
-                val x = if (beingDragged) dragging.currentX else geometry.xAt(startUs)
+                val x = if (beingDragged) sleep.currentX else geometry.xAt(startUs)
                 val width = geometry.widthOf(item.durationUs)
 
                 drawRoundRect(
@@ -164,12 +180,9 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPlayhead(x: Flo
         color = Color.White,
         start = Offset(x, 0f),
         end = Offset(x, size.height),
-        strokeWidth = Tokens.Layout.PLAYHEAD_WIDTH_DP.toFloat(),
+        strokeWidth = Tokens.Layout.PLAYHEAD_WIDTH_DP.dp.toPx(),
     )
     drawCircle(color = Color.White, radius = 5f, center = Offset(x, 0f))
 }
 
 private fun nl.artifation.videoeditor.design.Argb.toComposeColor(): Color = Color(value)
-
-/** Compose-loze density-hulp voor [TimelineGeometry]; zie daar. */
-internal fun Density.pxPerDp(): Float = 1.dp.toPx()

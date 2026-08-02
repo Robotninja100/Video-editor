@@ -10,6 +10,8 @@ import androidx.media3.common.util.GlUtil
 import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BaseGlShaderProgram
+import nl.artifation.videoeditor.model.PlannedClip
+import nl.artifation.videoeditor.model.sourcePtsFor
 
 /**
  * Blur buiten de mask, scherp erbinnen.
@@ -31,17 +33,32 @@ internal class MaskedBlurShaderProgram(
     maskUri: Uri,
     private val radiusFrac: Float,
     /**
-     * In-point van de clip. De effect-PTS staat in tijdlijntijd; de masktrack
-     * hoort bij de bron. Zonder deze correctie loopt de mask uit de pas zodra
-     * een clip getrimd is — en dat valt pas op met echt materiaal.
+     * De clip waar dit effect bij hoort.
+     *
+     * Nodig voor de omrekening van uitvoertijd naar bronpositie: die telt de
+     * in-point erbij én rekent de snelheid mee. Beide stonden hier eerder los of
+     * ontbraken, en `sourcePtsFor` legt de aanname nu op één geteste plek vast.
      */
-    private val clipInPointUs: Long,
+    private val clip: PlannedClip,
     openDecoder: (Uri, Int) -> MaskVideoDecoder,
 ) : BaseGlShaderProgram(/* useHdr= */ false, /* texturePoolCapacity= */ 1) {
 
     private val program: GlProgram = GlProgram(context, VERTEX_SHADER, FRAGMENT_SHADER)
     private val maskTextureId: Int = GlUtil.createExternalTexture()
-    private val decoder: MaskVideoDecoder = openDecoder(maskUri, maskTextureId)
+
+    /**
+     * Gooit het openen van de decoder, dan lekken het programma en de textuur
+     * hierboven: de constructor keert nooit terug, dus `release()` wordt nooit
+     * bereikt. En `toGlShaderProgram` draait per renderpas, dus opnieuw proberen
+     * put de decoders uit.
+     */
+    private val decoder: MaskVideoDecoder = try {
+        openDecoder(maskUri, maskTextureId)
+    } catch (e: Throwable) {
+        runCatching { program.delete() }
+        runCatching { GLES30.glDeleteTextures(1, intArrayOf(maskTextureId), 0) }
+        throw e
+    }
 
     private var width = 1
     private var height = 1
@@ -54,14 +71,20 @@ internal class MaskedBlurShaderProgram(
 
     override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
         try {
-            // Tijdlijn-PTS naar bron-PTS, daarna de mask vooruittrekken.
-            decoder.advanceTo(presentationTimeUs + clipInPointUs)
+            // Uitvoertijd naar bronpositie — in-point én snelheid — en dan de
+            // mask vooruittrekken. Zie `sourcePtsFor` in `:core-model`.
+            decoder.advanceTo(clip.sourcePtsFor(presentationTimeUs))
 
             program.use()
             program.setSamplerTexIdUniform("uSource", inputTexId, /* texUnitIndex= */ 0)
             program.setSamplerTexIdUniform("uMask", maskTextureId, /* texUnitIndex= */ 1)
             program.setFloatUniform("uRadius", radiusFrac)
-            program.setFloatsUniform("uTexelSize", floatArrayOf(1f / width, 1f / height))
+            // Beeldverhouding, niet texelgrootte. `uRadius` is een fractie van de
+            // frame*breedte*; zonder correctie is de blur in UV-ruimte even breed
+            // als hoog en dus in pixels uitgerekt. En een uniform die de shader
+            // niet leest, bestaat na het compileren niet meer — `setFloatsUniform`
+            // deed daar `checkNotNull` op, wat elke render op frame 0 sloopte.
+            program.setFloatUniform("uAspect", width.toFloat() / height.toFloat())
             program.setBufferAttribute(
                 "aPosition",
                 GlUtil.getNormalizedCoordinateBounds(),
@@ -77,8 +100,19 @@ internal class MaskedBlurShaderProgram(
     }
 
     override fun release() {
-        super.release()
-        decoder.release()
+        // `super.release()` mag gooien — een verloren EGL-context bij het naar de
+        // achtergrond gaan tijdens export. Zonder `finally` bleef de decoder dan
+        // hangen met zijn MediaCodec, Surface en SurfaceTexture, voor de rest van
+        // de levensduur van het proces.
+        try {
+            super.release()
+        } finally {
+            releaseOwnResources()
+        }
+    }
+
+    private fun releaseOwnResources() {
+        runCatching { decoder.release() }
         runCatching { program.delete() }
         runCatching { GLES30.glDeleteTextures(1, intArrayOf(maskTextureId), 0) }
     }
@@ -108,20 +142,22 @@ internal class MaskedBlurShaderProgram(
             uniform sampler2D uSource;
             uniform samplerExternalOES uMask;
             uniform float uRadius;
-            uniform vec2 uTexelSize;
+            uniform float uAspect;
             varying vec2 vTex;
 
             vec4 blur(vec2 uv) {
               // 13-taps separabele benadering; radius in fractie van de breedte,
               // zodat preview en export hetzelfde beeld geven.
-              float step = uRadius;
               vec4 sum = vec4(0.0);
               float total = 0.0;
               for (int i = -6; i <= 6; i++) {
-                float offset = float(i) / 6.0 * step;
+                float t = float(i) / 6.0 * uRadius;
                 float weight = 1.0 - abs(float(i)) / 7.0;
-                sum += texture2D(uSource, uv + vec2(offset, 0.0)) * weight;
-                sum += texture2D(uSource, uv + vec2(0.0, offset)) * weight;
+                // Verticaal maal de beeldverhouding: uRadius is een fractie van
+                // de breedte, dus in UV-ruimte is dezelfde pixelafstand
+                // verticaal `uAspect` keer zo groot.
+                sum += texture2D(uSource, uv + vec2(t, 0.0)) * weight;
+                sum += texture2D(uSource, uv + vec2(0.0, t * uAspect)) * weight;
                 total += weight * 2.0;
               }
               return sum / total;

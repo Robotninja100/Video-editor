@@ -75,7 +75,7 @@ public class CompositionMapper(private val context: Context) {
                             context = context,
                             maskUri = Uri.parse(effect.maskUri),
                             radiusFrac = effect.radiusFrac,
-                            clipInPointUs = clip.inPointUs,
+                            clip = clip,
                         ),
                     )
 
