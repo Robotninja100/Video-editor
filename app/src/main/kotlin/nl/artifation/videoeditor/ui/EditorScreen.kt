@@ -119,11 +119,19 @@ public fun EditorScreen(
             }
         }
 
-        if (state.analysis != null) {
-            // Overlay: analyse duurt minuten en verdient de aandacht die het opeist.
-            AnalysisSheet(
+        // Analyse gaat voor: die blokkeert het monteren, een export niet. Twee
+        // panelen over elkaar heen is geen keuze maar een ongeluk.
+        when {
+            state.analysis != null -> AnalysisSheet(
                 progress = state.analysis,
                 onCancel = actions.onCancelAnalysis,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+
+            state.export != null -> ExportSheet(
+                status = state.export,
+                onCancel = actions.onCancelExport,
+                onDismiss = actions.onDismissExport,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -146,6 +154,10 @@ public data class EditorState(
     val analysis: AnalysisProgress?,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
+    /** Er staat een clip geselecteerd die weg kan. */
+    val canDelete: Boolean = false,
+    /** `null` zolang er niets te melden valt over een export. */
+    val export: ExportStatus? = null,
 )
 
 public data class AnalysisProgress(
@@ -155,6 +167,23 @@ public data class AnalysisProgress(
     val estimatedUsd: Double?,
 )
 
+/**
+ * De drie dingen die een export over zichzelf te melden heeft.
+ *
+ * Als aparte toestanden en niet als één klasse met lege velden: een export die
+ * klaar is heeft geen percentage, en een die mislukt is heeft geen bestand. Dat
+ * in één type proppen betekent dat elke plek die het leest moet raden welke
+ * velden nu gevuld zijn.
+ */
+public sealed interface ExportStatus {
+
+    public data class Running(val percent: Int) : ExportStatus
+
+    public data class Done(val outputPath: String) : ExportStatus
+
+    public data class Failed(val message: String) : ExportStatus
+}
+
 public data class EditorActions(
     val onScrub: (Us) -> Unit,
     val onSelect: (String?) -> Unit,
@@ -163,4 +192,11 @@ public data class EditorActions(
     val onCancelAnalysis: () -> Unit,
     val onUndo: () -> Unit,
     val onRedo: () -> Unit,
+    /** Knipt alle sporen door op de playhead. */
+    val onSplit: () -> Unit,
+    val onDelete: () -> Unit,
+    val onExport: () -> Unit,
+    val onCancelExport: () -> Unit,
+    /** Sluit het paneel na een geslaagde of mislukte export. */
+    val onDismissExport: () -> Unit,
 )

@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import nl.artifation.videoeditor.model.US_PER_MS
 import nl.artifation.videoeditor.model.Us
+import nl.artifation.videoeditor.render.Exporter
 import nl.artifation.videoeditor.ui.EditorScreen
 
 /**
@@ -43,6 +44,23 @@ public class EditorActivity : ComponentActivity() {
 
         setContent {
             val model: EditorViewModel = viewModel()
+            val context = LocalContext.current
+            val export = remember(context) { ExportController(context) }
+
+            // Vasthouden aan het model en niet aan de compositie: de listener
+            // wordt door Media3 aangeroepen, mogelijk nadat dit scherm al opnieuw
+            // is opgebouwd.
+            val exportListener = remember(model) {
+                object : Exporter.Listener {
+                    override fun onProgress(percent: Int) = model.onExportProgress(percent)
+
+                    override fun onCompleted(outputPath: String) =
+                        model.onExportCompleted(outputPath)
+
+                    override fun onFailed(cause: Throwable) =
+                        model.onExportFailed(cause.message ?: "onbekende fout")
+                }
+            }
 
             // Zonder materiaal is er niets te monteren, dus de kiezer komt
             // meteen. Een lege tijdlijn tonen en wachten tot iemand een knop
@@ -54,7 +72,13 @@ public class EditorActivity : ComponentActivity() {
                     player = rememberPreviewPlayer(model.project),
                     analysis = null,
                 ),
-                actions = model.actions(),
+                actions = model.actions(
+                    onExport = {
+                        model.onExportProgress(0)
+                        export.start(model.project, exportListener)
+                    },
+                    onCancelExport = export::cancel,
+                ),
             )
         }
     }

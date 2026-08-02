@@ -54,24 +54,40 @@ public fun Toolbar(
             )
         }
 
-        // Ongedaan maken hoort in de balk en niet in een menu: bij monteren is
-        // het de meest gebruikte handeling die er is.
-        HistorieKnop("↶", state.canUndo, actions.onUndo)
-        HistorieKnop("↷", state.canRedo, actions.onRedo)
+        // Knippen op de playhead is bij monteren de handeling die je het vaakst
+        // doet, dus die staat in de balk en niet achter een menu.
+        BalkKnop("✂", enabled = true, onClick = actions.onSplit)
+        BalkKnop("⌫", enabled = state.canDelete, onClick = actions.onDelete)
 
+        // Ongedaan maken hoort er direct naast: knippen is de handeling die je
+        // het vaakst terugdraait.
+        BalkKnop("↶", state.canUndo, actions.onUndo)
+        BalkKnop("↷", state.canRedo, actions.onRedo)
+
+        val exporteert = state.export is ExportStatus.Running
         Text(
-            text = "Exporteer",
+            text = if (exporteert) "Bezig…" else "Exporteer",
             color = Color.White,
             fontSize = Tokens.Type.Label.sizeSp.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
                 .clip(RoundedCornerShape(Tokens.Radius.FULL.dp))
-                .background(Tokens.Palette.accent.toColor())
-                .clickable { /* fase 1: export starten */ }
+                .background(
+                    if (exporteert) {
+                        Tokens.Palette.accent.withAlpha(UITGEGRIJSD_ALPHA).toColor()
+                    } else {
+                        Tokens.Palette.accent.toColor()
+                    },
+                )
+                // Tijdens een lopende export niet klikbaar: twee keer starten zou
+                // op een `check` in de Exporter stuklopen.
+                .clickable(enabled = !exporteert, onClick = actions.onExport)
                 .padding(horizontal = Tokens.Space.L.dp, vertical = Tokens.Space.S.dp),
         )
     }
 }
+
+private const val UITGEGRIJSD_ALPHA = 0.4f
 
 /**
  * Een knop die uitgegrijsd is wanneer er niets te doen valt.
@@ -80,7 +96,7 @@ public fun Toolbar(
  * onvoorspelbaar, en je duim leert de plek af.
  */
 @Composable
-private fun HistorieKnop(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+private fun BalkKnop(glyph: String, enabled: Boolean, onClick: () -> Unit) {
     Text(
         text = glyph,
         color = if (enabled) {

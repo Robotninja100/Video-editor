@@ -91,11 +91,16 @@ speelt hem af met `CompositionPlayer` — precies het rondje dat fase 0 moet
 bewijzen. Monteren zelf (knippen, slepen, effecten) zit in het model en in de
 tijdlijn-UI.
 
-Exporteren kan sinds kort ook: `Exporter` in `:core-render` schrijft hetzelfde
-renderplan weg dat de preview afspeelt, met voortgang en annuleren, en met de
-bitrate uit een `ExportPreset`. Preview en export delen daarmee de complete
-effectketen — precies de opzet waarvan fase 0 moet aantonen dat hij ook echt
-hetzelfde beeld oplevert.
+Knippen op de playhead, de geselecteerde clip verwijderen, ongedaan maken en
+exporteren zitten in de bovenbalk. De exportknop schrijft hetzelfde renderplan
+weg dat de preview afspeelt, met voortgang en annuleren, en met de bitrate uit
+een `ExportPreset` die uit het project zelf wordt afgeleid. Preview en export
+delen daarmee de complete effectketen — precies de opzet waarvan fase 0 moet
+aantonen dat hij ook echt hetzelfde beeld oplevert.
+
+Het bestand komt in de app-map (`Android/data/…/files/Movies`), niet in de
+galerij: wegschrijven naar MediaStore vraagt om keuzes over mislukte exports die
+bij de afwerking horen.
 
 **Dat hij compileert betekent niet dat hij werkt.** Er is nooit een frame op een
 toestel gerenderd. Wel is elke Media3-aanroep nagelezen tegen de **bron van
