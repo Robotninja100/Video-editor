@@ -134,6 +134,13 @@ public fun EditorScreen(
                 onDismiss = actions.onDismissExport,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
+
+            state.silenceProposal != null -> ProposalSheet(
+                proposal = state.silenceProposal,
+                onApply = actions.onApplySilenceCut,
+                onDismiss = actions.onDismissProposal,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 }
@@ -158,6 +165,23 @@ public data class EditorState(
     val canDelete: Boolean = false,
     /** `null` zolang er niets te melden valt over een export. */
     val export: ExportStatus? = null,
+    /** Het resultaat van de stilte-analyse, zolang het nog niet is toegepast. */
+    val silenceProposal: SilenceProposal? = null,
+)
+
+/**
+ * Wat de analyse voorstelt, in termen waar je iets aan hebt.
+ *
+ * Niet de stiltes zelf maar wat ze opleveren: hoeveel er weggaat en hoeveel er
+ * overblijft. "Zeventien stiltes gevonden" is een meting; "tweeënhalve minuut
+ * korter" is een reden om op ja te drukken.
+ */
+public data class SilenceProposal(
+    val silenceCount: Int,
+    val removedUs: Us,
+    val resultingDurationUs: Us,
+    /** De stukken die blijven; hiermee wordt de tijdlijn opnieuw opgebouwd. */
+    val keepIntervals: List<LongRange>,
 )
 
 public data class AnalysisProgress(
@@ -199,4 +223,8 @@ public data class EditorActions(
     val onCancelExport: () -> Unit,
     /** Sluit het paneel na een geslaagde of mislukte export. */
     val onDismissExport: () -> Unit,
+    /** Zoekt de stiltes in het bronmateriaal. */
+    val onAnalyzeAudio: () -> Unit,
+    val onApplySilenceCut: () -> Unit,
+    val onDismissProposal: () -> Unit,
 )

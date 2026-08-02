@@ -125,29 +125,43 @@ public fun ToolRail(
     actions: EditorActions,
     modifier: Modifier = Modifier,
 ) {
+    // Alleen het audiogereedschap doet iets: dat is fase 2 en die is af. De rest
+    // staat er al wel, zodat de kolom niet bij elke fase van vorm verandert.
     val tools = listOf(
-        "◎" to Tokens.Track.mask,
-        "T" to Tokens.Track.caption,
-        "⌗" to Tokens.Track.video,
-        "◐" to Tokens.Track.audio,
+        Tool("◎", Tokens.Track.mask, null),
+        Tool("T", Tokens.Track.caption, null),
+        Tool("⌗", Tokens.Track.video, null),
+        Tool("◐", Tokens.Track.audio, actions.onAnalyzeAudio),
     )
 
     Column(
         modifier = modifier.padding(Tokens.Space.XS.dp),
         verticalArrangement = Arrangement.spacedBy(Tokens.Space.XS.dp),
     ) {
-        for ((glyph, kleur) in tools) {
+        for (tool in tools) {
+            val actief = tool.onClick != null && state.analysis == null
             Text(
-                text = glyph,
-                color = kleur.toColor(),
+                text = tool.glyph,
+                color = if (actief) {
+                    tool.kleur.toColor()
+                } else {
+                    tool.kleur.withAlpha(UITGEGRIJSD_ALPHA).toColor()
+                },
                 fontSize = Tokens.Type.Headline.sizeSp.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .size(Tokens.Layout.MIN_TOUCH_DP.dp)
                     .clip(RoundedCornerShape(Tokens.Radius.FULL.dp))
-                    .clickable { /* fase 3 t/m 6: het bijbehorende gereedschap */ }
+                    .clickable(enabled = actief) { tool.onClick?.invoke() }
                     .padding(Tokens.Space.S.dp),
             )
         }
     }
 }
+
+private data class Tool(
+    val glyph: String,
+    val kleur: nl.artifation.videoeditor.design.Argb,
+    /** `null` betekent: dit gereedschap bestaat nog niet. */
+    val onClick: (() -> Unit)?,
+)

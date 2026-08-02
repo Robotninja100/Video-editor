@@ -1,5 +1,6 @@
 package nl.artifation.videoeditor.analysis
 
+import kotlinx.serialization.Serializable
 import kotlin.math.PI
 import kotlin.math.log10
 import kotlin.math.pow
@@ -17,6 +18,7 @@ import kotlin.math.tan
  * **gating** (stiltes tellen niet mee, anders drukt een lange pauze de meting
  * omlaag en wordt het materiaal te hard genormaliseerd).
  */
+@Serializable
 public data class LoudnessResult(
     /** Integrated loudness in LUFS. `null` als er niets boven de gate uitkwam. */
     val integratedLufs: Float?,
