@@ -4,13 +4,16 @@ AI-video-editor voor Android, voor eigen gebruik. Doelfeatures: object tracking 
 auto-blur, auto-ondertiteling, auto-knippen op stiltes, auto-reframe naar 9:16 en
 auto-edit.
 
-Het volledige plan met architectuur, roadmap en risico's staat in
-**[docs/BOUWPLAN.md](docs/BOUWPLAN.md)**.
+Twee documenten horen erbij. **[docs/BOUWPLAN.md](docs/BOUWPLAN.md)** legt uit
+*waarom* de architectuur is zoals hij is — de afwegingen, de Media3-beperkingen,
+de risico's. **[docs/PRODUCTPLAN.md](docs/PRODUCTPLAN.md)** beschrijft *wat er nog
+moet gebeuren en in welke volgorde*, tot een versie die je aan iemand anders kunt
+geven.
 
 ## Huidige stand
 
-Tien modules gebouwd en getest; twee die compileren maar nooit op een toestel
-hebben gedraaid.
+Tien pure-JVM modules gebouwd en getest; twee Android-modules die compileren en
+getest zijn zonder toestel, maar nooit een frame gerenderd hebben.
 
 | Module | Status | Inhoud |
 |---|---|---|
@@ -24,10 +27,10 @@ hebben gedraaid.
 | `:core-errors` | ✅ | Foutentaxonomie, retry-beleid, gebruikersteksten |
 | `:core-thermal` | ✅ | Thermisch beleid, hysterese, blokplanner |
 | `:core-pipeline` | ✅ | **De koppeling**: thermische rem op de wachtrij, analyseplanner, integratietests |
-| `:core-render` | 🔨 bouwt in CI | `CompositionMapper`, `MaskedBlurShaderProgram`, `MaskVideoDecoder` |
-| `:app` | 🔨 bouwt in CI | Activity, state-houder, glas-UI, tijdlijn-canvas, resources |
+| `:core-render` | 🔨 bouwt en test in CI | `toComposition()`, masked blur, crop-pad, ondertitels, maskdecoder |
+| `:app` | 🔨 bouwt en test in CI | Editor, glas-UI, tijdlijn-canvas, en het fase 0-meetscherm |
 
-Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **786 tests** zonder
+Alle `core-`modules zijn bewust pure JVM. Daardoor draaien **804 tests** zonder
 emulator of toestel, en dat dekt precies waar stille regressies zitten:
 tijdlijnrekenwerk, DSP, coördinaatomrekening, toestandsmachines en het parsen van
 antwoorden van diensten die je niet in de hand hebt.
@@ -41,8 +44,15 @@ integratietests dat ze samen doen wat de bedoeling is.
 
 ```bash
 ./gradlew controle      # statische analyse, alle tests, dekkingsrapport
-./gradlew test          # alleen de unittests (786, pure JVM)
+./gradlew test          # alleen de unittests (804, pure JVM)
 ./gradlew :core-model:test
+```
+
+De Android-modules hebben sinds kort ook tests, onder Robolectric. Die draaien
+alleen mét SDK, en in CI in de APK-job:
+
+```bash
+./gradlew :core-render:testDebugUnitTest :app:testDebugUnitTest
 ```
 
 De ondergrens staat op 90% regeldekking. Detekt draait met een basislijn per
@@ -86,21 +96,31 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 
 ### Wat de app doet, en wat niet
 
-Bij het starten vraagt hij om een video, zet die als clip op de tijdlijn en
-speelt hem af met `CompositionPlayer` — precies het rondje dat fase 0 moet
-bewijzen. Monteren zelf (knippen, slepen, effecten) zit in het model en in de
-tijdlijn-UI, maar loopt nog niet door naar de export.
+De APK zet **twee** ingangen in de launcher.
 
-**Dat hij compileert betekent niet dat hij werkt.** Er is nooit een frame op een
-toestel gerenderd. Wel is elke Media3-aanroep nagelezen tegen de **bron van
-1.10.1** in plaats van tegen het geheugen, en dat leverde twee fouten op die
-allebei meteen fataal waren: `GlProgram(context, …)` leest shaders uit *assets*
-in plaats van uit een string, en `EditedMediaItem.Builder.setSpeed` neemt een
-`SpeedProvider`, geen getal.
+**Video-editor** vraagt bij het starten om een video, zet die als clip op de
+tijdlijn en speelt hem af met `CompositionPlayer`. Monteren (knippen, slepen,
+effecten) zit in het model en in de tijdlijn-UI, maar loopt nog niet door naar de
+export, en het project overleeft het afsluiten niet.
 
-Wat er nog bewezen moet worden, staat in `docs/BOUWPLAN.md` onder Verificatie:
-preview/export-pariteit, het teken van de in-point, en de richting van de
-snelheidsomrekening in `sourcePtsFor`. Die drie kunnen alleen op het toestel.
+**Video-editor: fase 0-poort** is een meetinstrument, geen functie. Het maakt zijn
+eigen bron- en maskvideo aan, exporteert die met `Transformer`, speelt dezelfde
+compositie af in `CompositionPlayer`, en vergelijkt de frames met SSIM. Daarnaast
+controleert het of de masked blur synchroon blijft — ook op een getrimde clip.
+Eén knop, uitslag in gewone taal. Dit is de go/no-go van fase 0, en het staat
+bewust los zodat het ook werkt als de editor stuk is.
+
+**Dat het compileert en getest is, betekent niet dat het werkt.** Er is nooit een
+frame op een toestel gerenderd. Wel is elke Media3-aanroep nagelezen tegen de
+**bron van 1.10.1** in plaats van tegen het geheugen, en dat leverde twee fouten
+op die allebei meteen fataal waren: `GlProgram(context, …)` leest shaders uit
+*assets* in plaats van uit een string, en `EditedMediaItem.Builder.setSpeed` neemt
+een `SpeedProvider`, geen getal.
+
+Wat er nog bewezen moet worden, staat in
+[docs/PRODUCTPLAN.md](docs/PRODUCTPLAN.md) onder fase 0: preview/export-pariteit,
+het teken van het in-punt, en de richting van de snelheidsomrekening in
+`sourcePtsFor`. Die drie kunnen alleen op het toestel.
 
 ## Ontwerpprincipes
 
@@ -112,8 +132,9 @@ modelinferentie tijdens playback, ooit.
 
 Daardoor is het ook een vrije keuze of een analyse op het toestel of in de cloud
 draait: de sidecar-formaten zijn identiek, dus de renderpipeline merkt het verschil
-niet. Transcriptie en segmentatie gaan naar externe diensten, stiltedetectie en
-reframe-detectie blijven lokaal. Zie het bouwplan voor de afweging.
+niet. Transcriptie gaat naar een externe dienst; stiltedetectie, reframe-detectie
+en tracking blijven lokaal. Zie het productplan §6 voor de afweging, en waar de
+knop zit om hem om te zetten.
 
 **Media3 is de backend, niet het projectformaat.** `:core-model` bevat geen enkel
 Media3-type. De vertaling gebeurt in één functie in `:core-render`. Zolang dat het
@@ -122,4 +143,5 @@ enige koppelvlak blijft, kan Media3 geüpgraded worden zonder de editor te hersc
 
 Verder: alle tijden in **microseconden**, nooit in framenummers (telefoonopnames zijn
 vaak variable framerate). Effectparameters in **genormaliseerde eenheden**, nooit in
-pixels, anders zien preview en export er verschillend uit.
+pixels, anders zien preview en export er verschillend uit. En in de maskvideo geldt:
+**wit is scherp, zwart is geblurd.**

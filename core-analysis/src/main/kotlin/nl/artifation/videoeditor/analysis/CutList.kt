@@ -18,29 +18,44 @@ public object CutList {
         val kept: List<TranscriptSegment>,
         /** Indices die niet bestonden in het transcript. */
         val rejected: List<Int>,
+        /**
+         * Indices die het model meer dan één keer noemde.
+         *
+         * Apart van [rejected], want het is een ander soort fout: een onbekende
+         * index is een verzinsel, een dubbele is een model dat zichzelf herhaalt.
+         * Het resultaat is in beide gevallen bruikbaar, maar wie er structureel
+         * één ziet oplopen wil dat weten in plaats van stilzwijgend een selectie
+         * krijgen die korter is dan het model dacht te geven.
+         */
+        val duplicates: List<Int> = emptyList(),
     ) {
-        val hasRejections: Boolean get() = rejected.isNotEmpty()
+        val hasRejections: Boolean get() = rejected.isNotEmpty() || duplicates.isNotEmpty()
     }
 
     /**
      * Valideert [indices] tegen [transcript].
      *
-     * Onbekende indices verdwijnen naar [Result.rejected]. Dubbelingen worden
-     * samengevoegd en de volgorde wordt genormaliseerd naar tijdvolgorde — de LLM
-     * mag geen segmenten omdraaien, dat levert onbedoelde jump-cuts op.
+     * Onbekende indices verdwijnen naar [Result.rejected], herhalingen naar
+     * [Result.duplicates]. De volgorde wordt genormaliseerd naar tijdvolgorde — de
+     * LLM mag geen segmenten omdraaien, dat levert onbedoelde jump-cuts op.
      */
     public fun fromIndices(transcript: Transcript, indices: List<Int>): Result {
         val byIndex = transcript.segments.associateBy { it.index }
         val rejected = mutableListOf<Int>()
+        val duplicates = mutableListOf<Int>()
         val kept = linkedSetOf<Int>()
 
         for (index in indices) {
-            if (byIndex.containsKey(index)) kept.add(index) else rejected.add(index)
+            when {
+                !byIndex.containsKey(index) -> rejected.add(index)
+                !kept.add(index) -> duplicates.add(index)
+            }
         }
 
         return Result(
             kept = kept.mapNotNull { byIndex[it] }.sortedBy { it.startUs },
             rejected = rejected,
+            duplicates = duplicates,
         )
     }
 

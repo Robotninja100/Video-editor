@@ -35,7 +35,15 @@ android {
         jvmTarget = "17"
     }
 
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
+
     sourceSets["main"].java.srcDir("src/main/kotlin")
+    sourceSets["test"].java.srcDir("src/test/kotlin")
 }
 
 dependencies {
@@ -68,4 +76,12 @@ dependencies {
     implementation("io.ktor:ktor-client-okhttp:3.0.3")
     implementation("io.ktor:ktor-client-content-negotiation:3.0.3")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.3")
+
+    // De meetlat van de fase 0-poort — SSIM en de scherptemeting — staat zelf
+    // ook onder test. Een scheve meetlat geeft een uitslag die nergens op slaat,
+    // en dat is op een toestel juist niet te zien.
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation("junit:junit:4.13.2")
 }

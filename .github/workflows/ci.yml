@@ -256,6 +256,13 @@ jobs:
       - name: Takengrafiek van `controle` met Android erbij
         run: ./gradlew controle --dry-run
 
+      # De unittests van de Android-modules draaien alleen hier: ze hebben de SDK
+      # nodig, en de JVM-job hierboven heeft die bewust niet. Zonder deze stap
+      # zou de enige code die op een toestel draait ook de enige zijn zonder
+      # tests — en juist daar zit de vertaling naar Media3.
+      - name: Unittests van de Android-modules
+        run: set -o pipefail && ./gradlew :core-render:testDebugUnitTest :app:testDebugUnitTest 2>&1 | tee android-test.log
+
       - name: APK bouwen
         run: set -o pipefail && ./gradlew :app:assembleDebug 2>&1 | tee build.log
 
@@ -309,7 +316,10 @@ jobs:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
-          if-no-files-found: ignore
+          # Streng, in tegenstelling tot de andere uploads: de APK *is* het
+          # product van deze job, en de enige weg om de fase 0-poort op een
+          # toestel te draaien. Ontbreekt hij, dan is de groene build een leugen.
+          if-no-files-found: error
 
       - name: Build-log bewaren
         if: failure()

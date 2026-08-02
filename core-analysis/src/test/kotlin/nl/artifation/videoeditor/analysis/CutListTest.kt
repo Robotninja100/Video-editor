@@ -44,6 +44,16 @@ class CutListValidationTest {
     }
 
     @Test
+    fun `herhalingen worden apart gemeld, niet stil samengevoegd`() {
+        val result = CutList.fromIndices(transcript(3), listOf(1, 1, 2, 1))
+
+        assertEquals(listOf(1, 2), result.kept.map { it.index })
+        assertEquals(listOf(1, 1), result.duplicates, "twee herhalingen van index 1")
+        assertTrue(result.hasRejections, "een model dat zichzelf herhaalt hoort zichtbaar te zijn")
+        assertEquals(emptyList(), result.rejected, "een herhaling is geen verzinsel")
+    }
+
+    @Test
     fun `omgekeerde volgorde wordt genormaliseerd naar tijdvolgorde`() {
         val result = CutList.fromIndices(transcript(4), listOf(3, 0, 2))
         assertEquals(listOf(0, 2, 3), result.kept.map { it.index })
